@@ -99,7 +99,7 @@ export default function AdminProfile() {
           <div className="flex flex-col bg-[#1C2333] rounded-xl border border-white/5 overflow-hidden">
             {/* Edit Profile */}
             <button 
-              onClick={() => alert('Edit Profile feature coming soon!')}
+              onClick={() => navigate('/admin/profile/edit')}
               className="group flex items-center gap-4 px-4 min-h-[60px] cursor-pointer hover:bg-white/5 transition-colors border-b border-white/5"
             >
               <div className="text-primary flex items-center justify-center shrink-0">

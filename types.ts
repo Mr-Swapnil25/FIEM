@@ -33,6 +33,18 @@ export interface Event {
   createdAt: string;
   isPaid?: boolean;
   requiresApproval?: boolean;
+  // Rating fields
+  averageRating?: number;
+  totalReviews?: number;
+  ratingDistribution?: RatingDistribution;
+}
+
+export interface RatingDistribution {
+  1: number;
+  2: number;
+  3: number;
+  4: number;
+  5: number;
 }
 
 export type BookingStatus = 'confirmed' | 'cancelled' | 'checked_in' | 'waitlist';
@@ -80,11 +92,17 @@ export interface Review {
   id: string;
   userId: string;
   eventId: string;
-  rating: number;
+  rating: 1 | 2 | 3 | 4 | 5;
   comment?: string;
+  isAnonymous: boolean;
   createdAt: string;
+  updatedAt?: string;
+  // Expanded for UI convenience
   userName?: string;
   userPhoto?: string;
+  // Admin moderation fields
+  isFlagged?: boolean;
+  flagReason?: string;
 }
 
 export interface AuthState {

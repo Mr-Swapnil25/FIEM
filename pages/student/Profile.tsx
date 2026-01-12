@@ -45,7 +45,7 @@ export default function StudentProfile() {
   };
 
   const handleEditProfile = () => {
-    alert('Edit Profile feature coming soon!');
+    navigate('/student/profile/edit');
   };
 
   if (!user) return null;
@@ -118,7 +118,19 @@ export default function StudentProfile() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex w-full max-w-sm gap-4 mt-8">
+        <div className="flex w-full max-w-sm gap-3 mt-8">
+          <button 
+            onClick={() => navigate('/student/favorites')}
+            className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl bg-red-500/10 border border-red-500/20 shadow-sm hover:bg-red-500/20 transition-all active:scale-[0.98] group"
+          >
+            <span 
+              className="material-symbols-outlined text-red-400 text-[20px] group-hover:scale-110 transition-transform"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              favorite
+            </span>
+            <span className="font-semibold text-sm text-red-400">Favorites</span>
+          </button>
           <button 
             onClick={handleQRCode}
             className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl bg-surface border border-white/10 shadow-sm hover:bg-white/5 transition-all active:scale-[0.98] group"
@@ -126,9 +138,11 @@ export default function StudentProfile() {
             <span className="material-symbols-outlined text-white text-[20px] group-hover:scale-110 transition-transform">qr_code_2</span>
             <span className="font-semibold text-sm">QR Code</span>
           </button>
+        </div>
+        <div className="w-full max-w-sm mt-3">
           <button 
             onClick={handleEditProfile}
-            className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl bg-gradient-to-br from-primary to-indigo-600 shadow-glow text-white border border-transparent hover:brightness-110 transition-all active:scale-[0.98]"
+            className="w-full flex items-center justify-center gap-2 h-12 rounded-xl bg-gradient-to-br from-primary to-indigo-600 shadow-glow text-white border border-transparent hover:brightness-110 transition-all active:scale-[0.98]"
           >
             <span className="material-symbols-outlined text-[20px]">edit</span>
             <span className="font-semibold text-sm">Edit Profile</span>

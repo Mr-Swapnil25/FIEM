@@ -686,6 +686,105 @@ export const markNotificationRead = async (notificationId: string): Promise<void
   }
 };
 
+// ==================== FAVORITE OPERATIONS ====================
+
+interface DataConnectFavorite {
+  id: string;
+  eventId: string;
+  createdAt: string;
+}
+
+/**
+ * Get user's favorite events
+ */
+export const getUserFavorites = async (userId: string): Promise<DataConnectFavorite[]> => {
+  try {
+    const result = await executeQuery<{ favoriteEvents: DataConnectFavorite[] }>('ListUserFavorites', { 
+      userId 
+    });
+    return result.favoriteEvents || [];
+  } catch (error) {
+    console.error('[DataConnect] Error getting user favorites:', error);
+    return [];
+  }
+};
+
+/**
+ * Check if an event is favorited by a user
+ */
+export const checkIsFavorite = async (
+  userId: string, 
+  eventId: string
+): Promise<{ isFavorite: boolean; favoriteId: string | null }> => {
+  try {
+    const favorites = await getUserFavorites(userId);
+    const favorite = favorites.find(f => f.eventId === eventId);
+    return {
+      isFavorite: !!favorite,
+      favoriteId: favorite?.id || null
+    };
+  } catch (error) {
+    console.error('[DataConnect] Error checking favorite:', error);
+    return { isFavorite: false, favoriteId: null };
+  }
+};
+
+/**
+ * Add event to favorites
+ */
+export const addFavorite = async (
+  userId: string, 
+  eventId: string
+): Promise<DataConnectFavorite> => {
+  try {
+    const result = await executeMutation<{ favoriteEvent_insert: { id: string } }>('AddFavorite', {
+      userId,
+      eventId
+    });
+    
+    return {
+      id: result.favoriteEvent_insert.id,
+      eventId,
+      createdAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('[DataConnect] Error adding favorite:', error);
+    throw new Error('Failed to add to favorites');
+  }
+};
+
+/**
+ * Remove event from favorites
+ */
+export const removeFavorite = async (favoriteId: string): Promise<void> => {
+  try {
+    await executeMutation('RemoveFavorite', { id: favoriteId });
+  } catch (error) {
+    console.error('[DataConnect] Error removing favorite:', error);
+    throw new Error('Failed to remove from favorites');
+  }
+};
+
+/**
+ * Get user's favorite events with full event details
+ */
+export const getUserFavoriteEvents = async (userId: string): Promise<Event[]> => {
+  try {
+    const favorites = await getUserFavorites(userId);
+    if (favorites.length === 0) return [];
+    
+    // Fetch event details for each favorite
+    const eventPromises = favorites.map(f => getEventById(f.eventId));
+    const events = await Promise.all(eventPromises);
+    
+    // Filter out any null events (deleted/invalid) and maintain favorite order
+    return events.filter((e): e is Event => e !== null);
+  } catch (error) {
+    console.error('[DataConnect] Error getting favorite events:', error);
+    return [];
+  }
+};
+
 // ==================== DASHBOARD STATS ====================
 
 /**

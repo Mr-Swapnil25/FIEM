@@ -25,6 +25,8 @@ const EventDetails = lazy(() => import('./pages/student/EventDetails'));
 const BookingConfirmation = lazy(() => import('./pages/student/BookingConfirmation'));
 const MyEvents = lazy(() => import('./pages/student/MyEvents'));
 const StudentProfile = lazy(() => import('./pages/student/Profile'));
+const FavoritesList = lazy(() => import('./pages/student/FavoritesList'));
+const ProfileEdit = lazy(() => import('./pages/shared/ProfileEdit'));
 
 // Admin pages - lazy loaded
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
@@ -35,6 +37,7 @@ const AdminEvents = lazy(() => import('./pages/admin/Events'));
 const ParticipantDetails = lazy(() => import('./pages/admin/ParticipantDetails'));
 const EventPublishSuccess = lazy(() => import('./pages/admin/EventPublishSuccess'));
 const ScanTicket = lazy(() => import('./pages/admin/ScanTicket'));
+const ReviewModeration = lazy(() => import('./pages/admin/ReviewModeration'));
 
 // ============================================================================
 // LOADING FALLBACK COMPONENT
@@ -67,11 +70,15 @@ const LazyErrorBoundary: React.FC<{ children: React.ReactNode; fallback?: React.
     return <>{children}</>;
   };
 
+// Props interface for ErrorBoundary
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}
+
 // Actual Error Boundary class (React requires class component for error boundaries)
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback?: React.ReactNode },
-  ErrorBoundaryState
-> {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  declare props: ErrorBoundaryProps;
   state: ErrorBoundaryState = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -110,6 +117,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<AuthResult>;
   register: (data: { email: string; password: string; name: string; role: 'student' | 'admin'; phone?: string }) => Promise<AuthResult>;
   logout: () => Promise<void>;
+  updateUserProfile: (updatedUser: User) => void;
   isLoading: boolean;
 }
 
@@ -130,7 +138,7 @@ const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   // Hide navbar on login and profile pages
-  if (!user || location.pathname === '/login' || location.pathname === '/student/profile' || location.pathname === '/student/home' || location.pathname === '/student/events' || location.pathname === '/student/booking-success' || location.pathname.startsWith('/student/event/') || location.pathname === '/admin/dashboard' || location.pathname === '/admin/events' || location.pathname === '/admin/reports' || location.pathname === '/admin/profile' || location.pathname.startsWith('/admin/create-event') || location.pathname.startsWith('/admin/edit-event/') || location.pathname.startsWith('/admin/event-published') || location.pathname.startsWith('/admin/scan-ticket') || location.pathname.startsWith('/admin/participant/')) return null;
+  if (!user || location.pathname === '/login' || location.pathname === '/student/profile' || location.pathname === '/student/profile/edit' || location.pathname === '/student/home' || location.pathname === '/student/events' || location.pathname === '/student/favorites' || location.pathname === '/student/booking-success' || location.pathname.startsWith('/student/event/') || location.pathname === '/admin/dashboard' || location.pathname === '/admin/events' || location.pathname === '/admin/reports' || location.pathname === '/admin/reviews' || location.pathname === '/admin/profile' || location.pathname === '/admin/profile/edit' || location.pathname.startsWith('/admin/create-event') || location.pathname.startsWith('/admin/edit-event/') || location.pathname.startsWith('/admin/event-published') || location.pathname.startsWith('/admin/scan-ticket') || location.pathname.startsWith('/admin/participant/')) return null;
 
   const studentLinks = [
     { label: 'Home', path: '/student/home', icon: <Home size={20} /> },
@@ -275,6 +283,10 @@ export default function App() {
     await signOut();
   };
 
+  const updateUserProfile = (updatedUser: User) => {
+    setUser(updatedUser);
+  };
+
   if (isSplash) {
     return (
       <div className="min-h-screen bg-primary flex flex-col items-center justify-center text-white">
@@ -288,7 +300,7 @@ export default function App() {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUserProfile, isLoading }}>
       <HashRouter>
         <AppContent user={user} logout={logout} />
       </HashRouter>
@@ -304,14 +316,18 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
   const isFullScreenPage = !user || 
     location.pathname === '/login' || 
     location.pathname === '/student/profile' ||
+    location.pathname === '/student/profile/edit' ||
     location.pathname === '/student/home' ||
     location.pathname === '/student/events' ||
+    location.pathname === '/student/favorites' ||
     location.pathname === '/student/booking-success' ||
     location.pathname.startsWith('/student/event/') ||
     location.pathname === '/admin/dashboard' ||
     location.pathname === '/admin/events' ||
     location.pathname === '/admin/reports' ||
+    location.pathname === '/admin/reviews' ||
     location.pathname === '/admin/profile' ||
+    location.pathname === '/admin/profile/edit' ||
     location.pathname.startsWith('/admin/create-event') ||
     location.pathname.startsWith('/admin/edit-event/') ||
     location.pathname.startsWith('/admin/event-published') ||
@@ -335,6 +351,8 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
                   <Route path="home" element={<StudentHome />} />
                   <Route path="events" element={<MyEvents />} />
                   <Route path="profile" element={<StudentProfile />} />
+                  <Route path="profile/edit" element={<ProfileEdit variant="student" />} />
+                  <Route path="favorites" element={<FavoritesList />} />
                   <Route path="event/:id" element={<EventDetails />} />
                   <Route path="booking-success" element={<BookingConfirmation />} />
                   <Route path="*" element={<Navigate to="home" />} />
@@ -347,7 +365,9 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
                   <Route path="dashboard" element={<AdminDashboard />} />
                   <Route path="events" element={<AdminEvents />} />
                   <Route path="reports" element={<Reports />} />
+                  <Route path="reviews" element={<ReviewModeration />} />
                   <Route path="profile" element={<AdminProfile />} />
+                  <Route path="profile/edit" element={<ProfileEdit variant="admin" />} />
                   <Route path="create-event" element={<CreateEditEvent />} />
                   <Route path="edit-event/:id" element={<CreateEditEvent />} />
                   <Route path="event-published" element={<EventPublishSuccess />} />

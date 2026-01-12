@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getEventById, createBooking, getUserBookings } from '../../services/backend';
-import { Event } from '../../types';
+import { Event, Booking } from '../../types';
 import { useAuth } from '../../App';
+import { useFavoriteForEvent } from '../../hooks/useFavorites';
+import { useEventReviews, useReviewSubmission } from '../../hooks/useReviews';
+import { RatingBadge } from '../../components/StarRating';
+import ReviewForm from '../../components/ReviewForm';
+import ReviewsList from '../../components/ReviewsList';
 
 export default function EventDetails() {
   const { id } = useParams<{ id: string }>();
@@ -12,7 +17,36 @@ export default function EventDetails() {
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [isBooked, setIsBooked] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [userBookings, setUserBookings] = useState<Booking[]>([]);
+  
+  // Use the favorites hook for persistent favorite state
+  const { 
+    isFavorite, 
+    loading: favoriteLoading, 
+    error: favoriteError,
+    toggleFavorite 
+  } = useFavoriteForEvent(user?.id, id);
+
+  // Reviews hooks
+  const {
+    reviews,
+    loading: reviewsLoading,
+    error: reviewsError,
+    totalCount: reviewCount,
+    hasMore,
+    sortBy,
+    setSortBy,
+    loadMore,
+    refresh: refreshReviews,
+  } = useEventReviews({ eventId: id || '', pageSize: 10 });
+
+  const {
+    eligibility,
+    checkingEligibility,
+    submitting,
+    submitReview,
+    error: submitError,
+  } = useReviewSubmission(user?.id, id, event, userBookings);
 
   useEffect(() => {
     // SECURITY: Abort controller to prevent memory leaks and race conditions
@@ -33,7 +67,7 @@ export default function EventDetails() {
       }
       
       try {
-        const [eventData, userBookings] = await Promise.all([
+        const [eventData, bookings] = await Promise.all([
           getEventById(id),
           getUserBookings(user.id)
         ]);
@@ -42,9 +76,10 @@ export default function EventDetails() {
         if (abortController.signal.aborted) return;
 
         setEvent(eventData || null);
+        setUserBookings(bookings || []);
         
         // Check if user already booked this event with null-safe access
-        const hasBooked = (userBookings || []).some(
+        const hasBooked = (bookings || []).some(
           b => b?.eventId === id && b?.status !== 'cancelled'
         );
         setIsBooked(hasBooked);
@@ -195,15 +230,25 @@ export default function EventDetails() {
           </button>
           <div className="flex gap-3">
             <button 
-              onClick={() => setIsFavorite(!isFavorite)}
-              className="group flex items-center justify-center size-10 rounded-full bg-white/10 backdrop-blur-md text-white border border-white/10 shadow-lg transition-all active:scale-95 hover:bg-white/20"
+              onClick={toggleFavorite}
+              disabled={favoriteLoading}
+              className="group flex items-center justify-center size-10 rounded-full bg-white/10 backdrop-blur-md text-white border border-white/10 shadow-lg transition-all active:scale-95 hover:bg-white/20 disabled:opacity-50"
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             >
-              <span 
-                className="material-symbols-outlined text-[22px]"
-                style={{ fontVariationSettings: isFavorite ? "'FILL' 1" : "'FILL' 0", color: isFavorite ? '#ef4444' : 'white' }}
-              >
-                favorite
-              </span>
+              {favoriteLoading ? (
+                <span className="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
+              ) : (
+                <span 
+                  className="material-symbols-outlined text-[22px] transition-all duration-200"
+                  style={{ 
+                    fontVariationSettings: isFavorite ? "'FILL' 1" : "'FILL' 0", 
+                    color: isFavorite ? '#ef4444' : 'white',
+                    transform: isFavorite ? 'scale(1.1)' : 'scale(1)'
+                  }}
+                >
+                  favorite
+                </span>
+              )}
             </button>
             <button 
               onClick={handleShare}
@@ -353,6 +398,77 @@ export default function EventDetails() {
               #Students
             </span>
           </div>
+        </section>
+
+        {/* Divider */}
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-zinc-200 dark:via-zinc-800 to-transparent my-8"></div>
+
+        {/* Reviews Section */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+              Reviews
+              {event.totalReviews && event.totalReviews > 0 && (
+                <RatingBadge 
+                  rating={event.averageRating || 0} 
+                  reviewCount={event.totalReviews} 
+                />
+              )}
+            </h3>
+          </div>
+
+          {/* Review Form - Show only if eligible */}
+          {!checkingEligibility && eligibility?.canReview && (
+            <div className="mb-6">
+              <ReviewForm
+                onSubmit={async (data) => {
+                  const result = await submitReview(data);
+                  if (result) {
+                    refreshReviews();
+                  }
+                  return result;
+                }}
+                submitting={submitting}
+                error={submitError}
+              />
+            </div>
+          )}
+
+          {/* Show existing review if user already reviewed */}
+          {eligibility?.hasExistingReview && eligibility.existingReview && (
+            <div className="mb-6">
+              <ReviewForm
+                onSubmit={submitReview}
+                submitting={false}
+                error={null}
+                existingReview={eligibility.existingReview}
+              />
+            </div>
+          )}
+
+          {/* Eligibility message */}
+          {!checkingEligibility && !eligibility?.canReview && !eligibility?.hasExistingReview && (
+            <div className="mb-6 p-4 bg-slate-800/50 border border-white/5 rounded-xl">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-slate-500">info</span>
+                <p className="text-sm text-slate-400">{eligibility?.reason || 'You cannot review this event'}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Reviews List */}
+          <ReviewsList
+            reviews={reviews}
+            loading={reviewsLoading}
+            error={reviewsError}
+            totalCount={reviewCount}
+            hasMore={hasMore}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onLoadMore={loadMore}
+            averageRating={event.averageRating}
+            distribution={event.ratingDistribution}
+          />
         </section>
       </main>
 

@@ -4,6 +4,7 @@ import { Event, EventStatus, EventCategory, Booking } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../App';
 import { Plus, Users, Calendar, MapPin, RefreshCw } from 'lucide-react';
+import { RatingBadge } from '../../components/StarRating';
 
 export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) {
   const [events, setEvents] = useState<Event[]>([]);
@@ -411,6 +412,15 @@ export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) 
                       {formatDate(event.eventDate)} • {formatTime(event.eventDate)}
                     </div>
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">{event.title}</h3>
+                    {/* Rating Badge */}
+                    {event.totalReviews && event.totalReviews > 0 && (
+                      <div className="mt-2">
+                        <RatingBadge 
+                          rating={event.averageRating || 0} 
+                          reviewCount={event.totalReviews} 
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Footer */}

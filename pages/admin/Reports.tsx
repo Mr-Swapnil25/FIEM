@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getEvents, getEventParticipants, getAdminStats, subscribeToEvents } from '../../services/backend';
 import { Event, Booking } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { exportReport, ExportFormat } from '../../services/exportReports';
 
 export default function Reports() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -10,8 +11,22 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showEventSelector, setShowEventSelector] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     getEvents().then(data => {
@@ -49,8 +64,33 @@ export default function Reports() {
     p.userEmail?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleExport = () => {
-    alert('Export feature coming soon!');
+  const stats = {
+    total: participants.length,
+    confirmed: participants.filter(p => p.status === 'confirmed').length,
+    checkedIn: participants.filter(p => p.status === 'checked_in').length,
+  };
+
+  const handleExport = async (format: ExportFormat) => {
+    if (!selectedEvent) return;
+    
+    setIsExporting(true);
+    setShowExportMenu(false);
+    
+    try {
+      // Small delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      exportReport(format, {
+        participants: filteredParticipants,
+        event: selectedEvent,
+        stats,
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -71,12 +111,58 @@ export default function Reports() {
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <h1 className="text-lg font-bold text-white tracking-wide">Reports</h1>
-          <button 
-            onClick={handleExport}
-            className="flex items-center justify-center w-10 h-10 rounded-full text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <span className="material-symbols-outlined">download</span>
-          </button>
+          
+          {/* Export Dropdown */}
+          <div className="relative" ref={exportMenuRef}>
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              disabled={!selectedEvent || participants.length === 0 || isExporting}
+              className="flex items-center justify-center w-10 h-10 rounded-full text-slate-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className={`material-symbols-outlined ${isExporting ? 'animate-spin' : ''}`}>
+                {isExporting ? 'progress_activity' : 'download'}
+              </span>
+            </button>
+            
+            {/* Dropdown Menu */}
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-[#1a1f2e] rounded-xl border border-white/10 shadow-xl shadow-black/50 overflow-hidden z-50">
+                <div className="px-3 py-2 border-b border-white/5">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Export Format</p>
+                </div>
+                <button
+                  onClick={() => handleExport('csv')}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-emerald-400 text-[20px]">table_chart</span>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-white">CSV</p>
+                    <p className="text-[10px] text-slate-500">Spreadsheet compatible</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleExport('pdf')}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-red-400 text-[20px]">picture_as_pdf</span>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-white">PDF</p>
+                    <p className="text-[10px] text-slate-500">Professional report</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleExport('excel')}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-green-400 text-[20px]">grid_on</span>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-white">Excel</p>
+                    <p className="text-[10px] text-slate-500">Multi-sheet workbook</p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Event Selector */}
