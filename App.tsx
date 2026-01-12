@@ -1,37 +1,115 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate, Link } from 'react-router-dom';
 import { User } from './types';
-import { backend } from './services/mockBackend';
+
+// Firebase Auth Service
+import { onAuthStateChanged as subscribeToAuth, signIn, signUp, signOut, AuthResult } from './services/authService';
 
 // Icons
 import { 
   Home, Calendar, User as UserIcon, LogOut, 
   LayoutDashboard, PlusCircle, FileBarChart, 
-  Bell, Menu, X, CheckCircle
+  Bell, Menu, X, CheckCircle, Loader2
 } from 'lucide-react';
 
-// Components
+// ============================================================================
+// LAZY-LOADED COMPONENTS (Code Splitting)
+// ============================================================================
+
+// Auth - loaded immediately (critical path)
 import LoginScreen from './pages/Auth';
-import StudentHome from './pages/student/Home';
-import EventDetails from './pages/student/EventDetails';
-import BookingConfirmation from './pages/student/BookingConfirmation';
-import MyEvents from './pages/student/MyEvents';
-import StudentProfile from './pages/student/Profile';
-import AdminDashboard from './pages/admin/Dashboard';
-import CreateEditEvent from './pages/admin/CreateEditEvent';
-import Reports from './pages/admin/Reports';
-import AdminProfile from './pages/admin/Profile';
-import AdminEvents from './pages/admin/Events';
-import ParticipantDetails from './pages/admin/ParticipantDetails';
-import EventPublishSuccess from './pages/admin/EventPublishSuccess';
-import ScanTicket from './pages/admin/ScanTicket';
+
+// Student pages - lazy loaded
+const StudentHome = lazy(() => import('./pages/student/Home'));
+const EventDetails = lazy(() => import('./pages/student/EventDetails'));
+const BookingConfirmation = lazy(() => import('./pages/student/BookingConfirmation'));
+const MyEvents = lazy(() => import('./pages/student/MyEvents'));
+const StudentProfile = lazy(() => import('./pages/student/Profile'));
+
+// Admin pages - lazy loaded
+const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const CreateEditEvent = lazy(() => import('./pages/admin/CreateEditEvent'));
+const Reports = lazy(() => import('./pages/admin/Reports'));
+const AdminProfile = lazy(() => import('./pages/admin/Profile'));
+const AdminEvents = lazy(() => import('./pages/admin/Events'));
+const ParticipantDetails = lazy(() => import('./pages/admin/ParticipantDetails'));
+const EventPublishSuccess = lazy(() => import('./pages/admin/EventPublishSuccess'));
+const ScanTicket = lazy(() => import('./pages/admin/ScanTicket'));
+
+// ============================================================================
+// LOADING FALLBACK COMPONENT
+// ============================================================================
+
+const PageLoader = () => (
+  <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+    <div className="flex flex-col items-center gap-4">
+      <Loader2 size={48} className="text-blue-500 animate-spin" />
+      <p className="text-slate-400 text-sm">Loading...</p>
+    </div>
+  </div>
+);
+
+// ============================================================================
+// ERROR BOUNDARY FOR LAZY COMPONENTS
+// ============================================================================
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+// Using a class component for error boundary (required by React)
+// Note: ErrorBoundary must be a class component as per React documentation
+const LazyErrorBoundary: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = 
+  ({ children, fallback }) => {
+    // For functional approach, we use a wrapper
+    // The actual error boundary logic is handled by React.Suspense and try-catch
+    return <>{children}</>;
+  };
+
+// Actual Error Boundary class (React requires class component for error boundaries)
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback?: React.ReactNode },
+  ErrorBoundaryState
+> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+    console.error('[LazyLoad Error]', error, errorInfo);
+  }
+
+  render(): React.ReactNode {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-xl font-bold text-white mb-2">Failed to load page</h2>
+            <p className="text-slate-400 mb-4">Please refresh and try again</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // --- Auth Context ---
 interface AuthContextType {
   user: User | null;
-  login: (email: string, role: string) => Promise<void>;
-  register: (data: any) => Promise<void>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<AuthResult>;
+  register: (data: { email: string; password: string; name: string; role: 'student' | 'admin'; phone?: string }) => Promise<AuthResult>;
+  logout: () => Promise<void>;
   isLoading: boolean;
 }
 
@@ -166,48 +244,35 @@ export default function App() {
   const [isSplash, setIsSplash] = useState(true);
 
   useEffect(() => {
-    // Check for persisted session
-    const storedUser = localStorage.getItem('eventease_session');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    
     // Splash screen timer
-    const timer = setTimeout(() => {
+    const splashTimer = setTimeout(() => {
       setIsSplash(false);
-      setIsLoading(false);
     }, 1500);
 
-    return () => clearTimeout(timer);
+    // Subscribe to Firebase Auth state changes
+    const unsubscribe = subscribeToAuth((authUser) => {
+      setUser(authUser);
+      setIsLoading(false);
+    });
+
+    return () => {
+      clearTimeout(splashTimer);
+      unsubscribe();
+    };
   }, []);
 
-  const login = async (email: string, role: string) => {
-    try {
-      // Allow simulation of login without strict password for demo
-      const loggedUser = await backend.login(email);
-      if (loggedUser.role !== role) throw new Error(`User is not a ${role}`);
-      setUser(loggedUser);
-      localStorage.setItem('eventease_session', JSON.stringify(loggedUser));
-    } catch (e) {
-      alert((e as Error).message);
-      throw e;
-    }
+  const login = async (email: string, password: string): Promise<AuthResult> => {
+    const result = await signIn(email, password);
+    return result;
   };
 
-  const register = async (data: any) => {
-    try {
-      const newUser = await backend.register(data);
-      setUser(newUser);
-      localStorage.setItem('eventease_session', JSON.stringify(newUser));
-    } catch (e) {
-      alert((e as Error).message);
-      throw e;
-    }
+  const register = async (data: { email: string; password: string; name: string; role: 'student' | 'admin'; phone?: string }): Promise<AuthResult> => {
+    const result = await signUp(data);
+    return result;
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('eventease_session');
+  const logout = async () => {
+    await signOut();
   };
 
   if (isSplash) {
@@ -258,48 +323,52 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
       <Navbar />
       
       <main className={`flex-1 w-full ${!isFullScreenPage ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}`}>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={!user ? <LoginScreen /> : <Navigate to={user.role === 'admin' ? "/admin/dashboard" : "/student/home"} />} />
-          
-          {/* Student Routes */}
-          <Route path="/student/*" element={user && user.role === 'student' ? (
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>
             <Routes>
-              <Route path="home" element={<StudentHome />} />
-              <Route path="events" element={<MyEvents />} />
-              <Route path="profile" element={<StudentProfile />} />
-              <Route path="event/:id" element={<EventDetails />} />
-              <Route path="booking-success" element={<BookingConfirmation />} />
-              <Route path="*" element={<Navigate to="home" />} />
-            </Routes>
-          ) : <Navigate to="/login" />} />
+              {/* Public Routes */}
+              <Route path="/login" element={!user ? <LoginScreen /> : <Navigate to={user.role === 'admin' ? "/admin/dashboard" : "/student/home"} />} />
+              
+              {/* Student Routes */}
+              <Route path="/student/*" element={user && user.role === 'student' ? (
+                <Routes>
+                  <Route path="home" element={<StudentHome />} />
+                  <Route path="events" element={<MyEvents />} />
+                  <Route path="profile" element={<StudentProfile />} />
+                  <Route path="event/:id" element={<EventDetails />} />
+                  <Route path="booking-success" element={<BookingConfirmation />} />
+                  <Route path="*" element={<Navigate to="home" />} />
+                </Routes>
+              ) : <Navigate to="/login" />} />
 
-          {/* Admin Routes */}
-          <Route path="/admin/*" element={user && user.role === 'admin' ? (
-            <Routes>
-              <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="events" element={<AdminEvents />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="profile" element={<AdminProfile />} />
-              <Route path="create-event" element={<CreateEditEvent />} />
-              <Route path="edit-event/:id" element={<CreateEditEvent />} />
-              <Route path="event-published" element={<EventPublishSuccess />} />
-              <Route path="scan-ticket" element={<ScanTicket />} />
-              <Route path="participant/:bookingId" element={<ParticipantDetails />} />
-              <Route path="*" element={<Navigate to="dashboard" />} />
-            </Routes>
-          ) : <Navigate to="/login" />} />
+              {/* Admin Routes */}
+              <Route path="/admin/*" element={user && user.role === 'admin' ? (
+                <Routes>
+                  <Route path="dashboard" element={<AdminDashboard />} />
+                  <Route path="events" element={<AdminEvents />} />
+                  <Route path="reports" element={<Reports />} />
+                  <Route path="profile" element={<AdminProfile />} />
+                  <Route path="create-event" element={<CreateEditEvent />} />
+                  <Route path="edit-event/:id" element={<CreateEditEvent />} />
+                  <Route path="event-published" element={<EventPublishSuccess />} />
+                  <Route path="scan-ticket" element={<ScanTicket />} />
+                  <Route path="participant/:bookingId" element={<ParticipantDetails />} />
+                  <Route path="*" element={<Navigate to="dashboard" />} />
+                </Routes>
+              ) : <Navigate to="/login" />} />
 
-          {/* Default Redirect */}
-          <Route path="*" element={<Navigate to="/login" />} />
-        </Routes>
+              {/* Default Redirect */}
+              <Route path="*" element={<Navigate to="/login" />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
       
       {/* Simple Footer - hide on full screen pages */}
       {!isFullScreenPage && (
         <footer className="bg-white border-t border-gray-200 py-6 mt-8">
           <div className="max-w-7xl mx-auto px-4 text-center text-gray-400 text-sm">
-            &copy; 2024 EventEase College Platform. All rights reserved.
+            &copy; 2026 EventEase College Platform. All rights reserved.
           </div>
         </footer>
       )}

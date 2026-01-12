@@ -1,0 +1,46 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // SECURITY: Helper function to validate image files
+    function isValidImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|gif|webp)')
+             && request.resource.size < 5 * 1024 * 1024; // Max 5MB
+    }
+    
+    // SECURITY: Helper function to validate small images (avatars)
+    function isValidAvatar() {
+      return request.resource.contentType.matches('image/(jpeg|png|gif|webp)')
+             && request.resource.size < 2 * 1024 * 1024; // Max 2MB for avatars
+    }
+    
+    // Event images - anyone can read, authenticated users can write valid images only
+    match /events/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null && isValidImage();
+      allow delete: if request.auth != null;
+    }
+    
+    // User avatars - anyone can read, owner can write valid avatars only
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null 
+                   && request.auth.uid == userId 
+                   && isValidAvatar();
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Tickets - only authenticated users can access their own
+    match /tickets/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null 
+                   && request.auth.uid == userId 
+                   && request.resource.size < 1 * 1024 * 1024; // Max 1MB
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Default deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

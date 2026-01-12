@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { backend } from '../../services/mockBackend';
+import { findBookingByTicketId, findBookingByQRCode, checkInParticipant, getUserById, getEventById, getEventParticipants, getParticipantDetails } from '../../services/backend';
 import { User, Booking, Event } from '../../types';
+import { useAuth } from '../../App';
 
 interface CheckedInData {
   booking: Booking;
@@ -12,6 +13,7 @@ interface CheckedInData {
 export default function ScanTicket() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user: currentUser } = useAuth(); // Get the authenticated admin user
   const [flashOn, setFlashOn] = useState(false);
   const [scanning, setScanning] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export default function ScanTicket() {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Get a random confirmed booking to simulate a scan
-      const allBookings = await backend.getEventParticipants(eventId || 'e1');
+      const allBookings = await getEventParticipants(eventId || 'e1');
       const confirmedBookings = allBookings.filter(b => b.status === 'confirmed');
       
       if (confirmedBookings.length === 0) {
@@ -70,37 +72,70 @@ export default function ScanTicket() {
   };
 
   const handleCheckIn = async (bookingId: string) => {
+    // SECURITY: Validate booking ID format
+    if (!bookingId || typeof bookingId !== 'string') {
+      setError('Invalid booking reference');
+      return;
+    }
+
+    // SECURITY: Sanitize booking ID to prevent injection
+    const sanitizedBookingId = bookingId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+    if (sanitizedBookingId !== bookingId.trim()) {
+      setError('Invalid booking ID format');
+      return;
+    }
+
     try {
       setProcessing(true);
       setError(null);
       
       // Get participant details first
-      const { booking, user, event } = await backend.getParticipantDetails(bookingId);
+      const { booking, user, event } = await getParticipantDetails(sanitizedBookingId);
       
-      if (!user || !event) {
-        throw new Error('Invalid ticket data');
+      // Validate all required data exists
+      if (!booking || !user || !event) {
+        throw new Error('Invalid ticket data - booking not found');
       }
       
-      if (booking.status === 'checked_in') {
-        throw new Error('Participant already checked in');
+      // Check booking status with proper null check
+      const status = booking.status?.toLowerCase();
+      if (status === 'checked_in') {
+        throw new Error(`${user.name || 'Participant'} has already checked in`);
       }
       
-      if (booking.status === 'cancelled') {
+      if (status === 'cancelled') {
         throw new Error('This booking has been cancelled');
       }
+
+      if (status === 'waitlist') {
+        throw new Error('This participant is on the waitlist');
+      }
       
-      // Perform check-in
-      const updatedBooking = await backend.checkInParticipant(bookingId);
+      // SECURITY: Validate current user exists
+      if (!currentUser?.id) {
+        throw new Error('Authentication required - please log in again');
+      }
+      
+      // Perform check-in with required parameters (bookingId, staffUserId, method)
+      await checkInParticipant(sanitizedBookingId, currentUser.id, 'qr_scan');
+      
+      // Update booking status locally for display
+      const checkedInBooking: Booking = {
+        ...booking,
+        status: 'checked_in' as const
+      };
       
       // Show success modal
       setCheckedInData({
-        booking: updatedBooking,
+        booking: checkedInBooking,
         user,
         event
       });
       setScanning(false);
     } catch (err) {
-      setError((err as Error).message);
+      const error = err as Error;
+      console.error('[ScanTicket] Check-in error:', error);
+      setError(error.message || 'Check-in failed');
     } finally {
       setProcessing(false);
     }
@@ -117,7 +152,7 @@ export default function ScanTicket() {
     
     try {
       // Search for booking by ticket ID
-      const result = await backend.findBookingByTicketId(manualId.trim());
+      const result = await findBookingByTicketId(manualId.trim());
       
       if (!result) {
         throw new Error('Ticket not found');

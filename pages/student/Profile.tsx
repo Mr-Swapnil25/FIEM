@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../App';
 import { useNavigate } from 'react-router-dom';
-import { backend } from '../../services/mockBackend';
+import { getUserBookings } from '../../services/backend';
 import { Booking } from '../../types';
 
 export default function StudentProfile() {
@@ -14,8 +14,12 @@ export default function StudentProfile() {
   useEffect(() => {
     const fetchBookings = async () => {
       if (user) {
-        const data = await backend.getUserBookings(user.id);
-        setBookings(data);
+        try {
+          const data = await getUserBookings(user.id);
+          setBookings(data);
+        } catch (error) {
+          console.error('Error fetching bookings:', error);
+        }
         setLoading(false);
       }
     };

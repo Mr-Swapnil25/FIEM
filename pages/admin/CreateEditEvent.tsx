@@ -1,16 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { backend } from '../../services/mockBackend';
+import { getEventById, createEvent, updateEvent, deleteEvent } from '../../services/backend';
+import { uploadEventImageCompressed, fileToDataUrl, UploadProgress } from '../../services/storageService';
 import { EventCategory } from '../../types';
+import { useAuth } from '../../App';
 
 export default function CreateEditEvent() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const isEditing = !!id;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState(false);
   const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -26,22 +32,26 @@ export default function CreateEditEvent() {
     if (isEditing && id) {
       const loadEvent = async () => {
         setLoading(true);
-        const event = await backend.getEventById(id);
-        if (event) {
-          const dateObj = new Date(event.eventDate);
-          setFormData({
-            title: event.title,
-            description: event.description,
-            date: dateObj.toISOString().split('T')[0],
-            time: dateObj.toTimeString().slice(0, 5),
-            venue: event.venue,
-            price: event.price,
-            totalSlots: event.totalSlots,
-            category: event.category
-          });
-          if (event.imageUrl) {
-            setCoverImage(event.imageUrl);
+        try {
+          const event = await getEventById(id);
+          if (event) {
+            const dateObj = new Date(event.eventDate);
+            setFormData({
+              title: event.title,
+              description: event.description,
+              date: dateObj.toISOString().split('T')[0],
+              time: dateObj.toTimeString().slice(0, 5),
+              venue: event.venue,
+              price: event.price,
+              totalSlots: event.totalSlots,
+              category: event.category
+            });
+            if (event.imageUrl) {
+              setCoverImage(event.imageUrl);
+            }
           }
+        } catch (error) {
+          console.error('Error loading event:', error);
         }
         setLoading(false);
       };
@@ -53,41 +63,134 @@ export default function CreateEditEvent() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCoverImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    // SECURITY: Validate file type strictly
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('Please upload a valid image file (JPEG, PNG, WebP, or GIF)');
+      e.target.value = ''; // Reset input
+      return;
+    }
+
+    // SECURITY: Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert('Image must be less than 5MB');
+      e.target.value = ''; // Reset input
+      return;
+    }
+
+    // SECURITY: Validate file extension matches MIME type
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    if (!extension || !validExtensions.includes(extension)) {
+      alert('Invalid file extension');
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      // Show preview immediately
+      const dataUrl = await fileToDataUrl(file);
+      setCoverImage(dataUrl);
+      setCoverImageFile(file);
+    } catch (error) {
+      console.error('Error processing image:', error);
+      alert('Failed to process image. Please try another file.');
+      e.target.value = '';
     }
   };
 
   const handleSubmit = async (isDraft: boolean = false) => {
-    if (!formData.title || !formData.date || !formData.time) {
-      alert('Please fill in all required fields');
+    // SECURITY: Comprehensive input validation
+    const errors: string[] = [];
+
+    if (!formData.title?.trim() || formData.title.length < 3) {
+      errors.push('Title must be at least 3 characters');
+    }
+    if (formData.title && formData.title.length > 200) {
+      errors.push('Title must be less than 200 characters');
+    }
+    if (!formData.date) {
+      errors.push('Date is required');
+    }
+    if (!formData.time) {
+      errors.push('Time is required');
+    }
+    if (!formData.venue?.trim()) {
+      errors.push('Venue is required');
+    }
+    if (formData.totalSlots < 1 || formData.totalSlots > 10000) {
+      errors.push('Total slots must be between 1 and 10,000');
+    }
+    if (formData.price < 0 || formData.price > 100000) {
+      errors.push('Price must be between 0 and 100,000');
+    }
+
+    // Validate event date is in the future (unless editing)
+    if (!isEditing && formData.date && formData.time) {
+      const eventDateTime = new Date(`${formData.date}T${formData.time}`);
+      if (eventDateTime < new Date()) {
+        errors.push('Event date must be in the future');
+      }
+    }
+
+    // SECURITY: Sanitize description to prevent XSS
+    if (formData.description && formData.description.length > 5000) {
+      errors.push('Description must be less than 5,000 characters');
+    }
+
+    if (errors.length > 0) {
+      alert('Please fix the following errors:\n\n' + errors.join('\n'));
       return;
     }
     
     setLoading(true);
     try {
+      let imageUrl = coverImage;
+      
+      // Upload image to Firebase Storage if a new file was selected
+      if (coverImageFile) {
+        setIsUploading(true);
+        const uploadResult = await uploadEventImageCompressed(
+          coverImageFile,
+          id,
+          (progress: UploadProgress) => {
+            setUploadProgress(progress.progress);
+          }
+        );
+        
+        if (uploadResult.success && uploadResult.url) {
+          imageUrl = uploadResult.url;
+        } else {
+          alert(uploadResult.error || 'Failed to upload image');
+          setIsUploading(false);
+          setLoading(false);
+          return;
+        }
+        setIsUploading(false);
+      }
+      
       const eventDate = new Date(`${formData.date}T${formData.time}`).toISOString();
       
       if (isEditing && id) {
-        await backend.updateEvent(id, {
+        await updateEvent(id, {
           ...formData,
           eventDate,
           status: isDraft ? 'draft' : 'published',
+          imageUrl: imageUrl || undefined
         });
         navigate('/admin/dashboard');
       } else {
-        const newEvent = await backend.createEvent({
+        const newEvent = await createEvent({
           ...formData,
           eventDate,
-          adminId: 'u1',
+          adminId: user?.id || 'admin',
           status: isDraft ? 'draft' : 'published',
-          imageUrl: coverImage || `https://picsum.photos/800/400?random=${Math.random()}`
+          imageUrl: imageUrl || `https://picsum.photos/800/400?random=${Math.random()}`
         });
         if (isDraft) {
           navigate('/admin/events');
@@ -96,9 +199,11 @@ export default function CreateEditEvent() {
         }
       }
     } catch (e) {
+      console.error('Error saving event:', e);
       alert('Error saving event');
     } finally {
       setLoading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -107,7 +212,7 @@ export default function CreateEditEvent() {
     if (window.confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
       setLoading(true);
       try {
-        await backend.deleteEvent(id);
+        await deleteEvent(id);
         navigate('/admin/dashboard');
       } catch (e) {
         alert('Error deleting event');

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { backend } from '../../services/mockBackend';
+import { getEvents, getEventParticipants, getAdminStats, subscribeToEvents } from '../../services/backend';
 import { Event, Booking } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -14,17 +14,29 @@ export default function Reports() {
   const location = useLocation();
 
   useEffect(() => {
-    backend.getEvents().then(data => {
+    getEvents().then(data => {
       setEvents(data);
       if(data.length > 0) setSelectedEventId(data[0].id);
+    }).catch(error => {
+      console.error('Error fetching events:', error);
     });
+    
+    // Subscribe to real-time updates
+    const unsubscribe = subscribeToEvents((updatedEvents) => {
+      setEvents(updatedEvents);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     if(selectedEventId) {
       setLoading(true);
-      backend.getEventParticipants(selectedEventId).then(data => {
+      getEventParticipants(selectedEventId).then(data => {
         setParticipants(data);
+        setLoading(false);
+      }).catch(error => {
+        console.error('Error fetching participants:', error);
         setLoading(false);
       });
     }

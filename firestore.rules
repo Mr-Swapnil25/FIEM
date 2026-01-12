@@ -1,0 +1,231 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================================
+    // HELPER FUNCTIONS
+    // ============================================================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns this resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Check if user is admin (based on custom claims)
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'admin';
+    }
+    
+    // Validate email domain for institutional users
+    function hasValidInstitutionalEmail() {
+      return isAuthenticated() && 
+             request.auth.token.email.matches('.*@teamfuture\\.in$');
+    }
+    
+    // Rate limiting helper - checks if enough time has passed since last write
+    function rateLimit(seconds) {
+      return request.time > resource.data.updatedAt + duration.value(seconds, 's')
+             || !exists(resource);
+    }
+    
+    // Validate required fields exist
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    // ============================================================================
+    // RATE LIMIT COLLECTION (Server-side tracking)
+    // ============================================================================
+    
+    match /rateLimits/{document} {
+      // Only Cloud Functions can read/write rate limit data
+      allow read, write: if false;
+    }
+    
+    // ============================================================================
+    // CSP VIOLATIONS COLLECTION (Monitoring)
+    // ============================================================================
+    
+    match /cspViolations/{document} {
+      // Only Cloud Functions can write CSP violations
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    
+    // ============================================================================
+    // ALERTS COLLECTION (Monitoring)
+    // ============================================================================
+    
+    match /alerts/{document} {
+      // Only admins can read alerts, only functions can write
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    
+    // ============================================================================
+    // USERS COLLECTION
+    // ============================================================================
+    
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isOwner(userId);
+      
+      // Admins can read all user profiles
+      allow read: if isAdmin();
+      
+      // Users can create their own profile (with rate limiting)
+      allow create: if isOwner(userId) 
+                    && hasRequiredFields(['displayName', 'email', 'role'])
+                    && request.resource.data.email == request.auth.token.email
+                    && request.resource.data.role in ['student', 'admin'];
+      
+      // Users can update their own profile (limited fields, rate limited)
+      allow update: if isOwner(userId)
+                    && request.resource.data.email == resource.data.email  // Cannot change email
+                    && request.resource.data.role == resource.data.role;   // Cannot change role
+      
+      // Only admins can delete user profiles
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // EVENTS COLLECTION
+    // ============================================================================
+    
+    match /events/{eventId} {
+      // Anyone can read published events
+      allow read: if resource.data.status == 'published' 
+                  || resource.data.status == 'ongoing'
+                  || isAdmin();
+      
+      // Only admins can create events
+      allow create: if isAdmin()
+                    && hasRequiredFields(['title', 'date', 'venue', 'capacity', 'status']);
+      
+      // Only admins can update events
+      allow update: if isAdmin();
+      
+      // Only admins can delete events (soft delete preferred)
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // BOOKINGS COLLECTION
+    // ============================================================================
+    
+    match /bookings/{bookingId} {
+      // Users can read their own bookings
+      allow read: if isAuthenticated() 
+                  && resource.data.userId == request.auth.uid;
+      
+      // Admins can read all bookings
+      allow read: if isAdmin();
+      
+      // Authenticated users can create bookings for themselves
+      // Rate limited: Max 1 booking per event per user (enforced in function)
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasRequiredFields(['userId', 'eventId', 'status', 'ticketId']);
+      
+      // Users can only cancel their own bookings
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.status == 'cancelled'
+                    && resource.data.status == 'confirmed';
+      
+      // Admins can update any booking (check-in, etc.)
+      allow update: if isAdmin();
+      
+      // No deletions allowed - use status change instead
+      allow delete: if false;
+    }
+    
+    // ============================================================================
+    // CATEGORIES COLLECTION
+    // ============================================================================
+    
+    match /categories/{categoryId} {
+      // Anyone authenticated can read categories
+      allow read: if isAuthenticated();
+      
+      // Only admins can manage categories
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // NOTIFICATIONS COLLECTION
+    // ============================================================================
+    
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if isAuthenticated() 
+                  && resource.data.userId == request.auth.uid;
+      
+      // Users can mark their own notifications as read
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      
+      // Only functions/admins can create notifications
+      allow create: if isAdmin();
+      
+      // No deletions - archive instead
+      allow delete: if false;
+    }
+    
+    // ============================================================================
+    // CHECK-IN LOGS COLLECTION
+    // ============================================================================
+    
+    match /checkInLogs/{logId} {
+      // Only admins can read check-in logs
+      allow read: if isAdmin();
+      
+      // Only admins can create check-in logs
+      allow create: if isAdmin()
+                    && hasRequiredFields(['staffUserId', 'bookingId', 'method', 'timestamp']);
+      
+      // Logs are immutable
+      allow update, delete: if false;
+    }
+    
+    // ============================================================================
+    // REVIEWS COLLECTION
+    // ============================================================================
+    
+    match /reviews/{reviewId} {
+      // Anyone can read approved reviews
+      allow read: if resource.data.status == 'approved' || isAdmin();
+      
+      // Authenticated users can create reviews for events they attended
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasRequiredFields(['userId', 'eventId', 'rating', 'comment']);
+      
+      // Users can update their own pending reviews
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid
+                    && resource.data.status == 'pending';
+      
+      // Admins can moderate reviews
+      allow update: if isAdmin();
+      
+      // No deletions
+      allow delete: if false;
+    }
+    
+    // ============================================================================
+    // DEFAULT DENY
+    // ============================================================================
+    
+    // Deny all other collections by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

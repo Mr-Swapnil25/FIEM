@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { backend } from '../../services/mockBackend';
+import { getUserBookings, subscribeToUserBookings, cancelBooking, getEventById } from '../../services/backend';
 import { useAuth } from '../../App';
 import { Booking } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -15,12 +15,24 @@ export default function MyEvents() {
   useEffect(() => {
     const fetch = async () => {
       if(user) {
-        const data = await backend.getUserBookings(user.id);
-        setBookings(data);
+        try {
+          const data = await getUserBookings(user.id);
+          setBookings(data);
+        } catch (error) {
+          console.error('Error fetching bookings:', error);
+        }
         setLoading(false);
       }
     };
     fetch();
+    
+    // Subscribe to real-time updates for bookings
+    if (user) {
+      const unsubscribe = subscribeToUserBookings(user.id, (updatedBookings) => {
+        setBookings(updatedBookings);
+      });
+      return () => unsubscribe();
+    }
   }, [user]);
 
   const filteredBookings = bookings.filter(booking => {

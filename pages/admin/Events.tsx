@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { backend } from '../../services/mockBackend';
+import { getEvents, deleteEvent, subscribeToEvents } from '../../services/backend';
 import { Event, EventStatus } from '../../types';
 
 type FilterType = 'all' | 'published' | 'drafts' | 'past' | 'upcoming';
@@ -17,16 +17,28 @@ export default function AdminEvents() {
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
-      const allEvents = await backend.getEvents();
-      setEvents(allEvents);
+      try {
+        const allEvents = await getEvents();
+        setEvents(allEvents);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      }
       setLoading(false);
     };
+    
     fetchEvents();
+    
+    // Subscribe to real-time updates
+    const unsubscribe = subscribeToEvents((updatedEvents) => {
+      setEvents(updatedEvents);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleDelete = async (eventId: string) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
-      await backend.deleteEvent(eventId);
+      await deleteEvent(eventId);
       setEvents(events.filter(ev => ev.id !== eventId));
     }
     setMenuOpen(null);

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { backend } from '../../services/mockBackend';
+import { getEventById, createBooking, getUserBookings } from '../../services/backend';
 import { Event } from '../../types';
 import { useAuth } from '../../App';
 
@@ -15,38 +15,89 @@ export default function EventDetails() {
   const [isFavorite, setIsFavorite] = useState(false);
 
   useEffect(() => {
+    // SECURITY: Abort controller to prevent memory leaks and race conditions
+    const abortController = new AbortController();
+    
     const load = async () => {
-      if (!id || !user) return;
+      // Validate required parameters
+      if (!id || !user?.id) {
+        setLoading(false);
+        return;
+      }
       
-      const [eventData, userBookings] = await Promise.all([
-        backend.getEventById(id),
-        backend.getUserBookings(user.id)
-      ]);
-
-      setEvent(eventData || null);
+      // SECURITY: Validate ID format to prevent injection
+      if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+        console.error('Invalid event ID format');
+        setLoading(false);
+        return;
+      }
       
-      // Check if user already booked this event
-      const hasBooked = userBookings.some(b => b.eventId === id && b.status !== 'cancelled');
-      setIsBooked(hasBooked);
+      try {
+        const [eventData, userBookings] = await Promise.all([
+          getEventById(id),
+          getUserBookings(user.id)
+        ]);
 
-      setLoading(false);
+        // Check if component is still mounted
+        if (abortController.signal.aborted) return;
+
+        setEvent(eventData || null);
+        
+        // Check if user already booked this event with null-safe access
+        const hasBooked = (userBookings || []).some(
+          b => b?.eventId === id && b?.status !== 'cancelled'
+        );
+        setIsBooked(hasBooked);
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          console.error('Error loading event:', error);
+          setEvent(null);
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
+      }
     };
+    
     load();
+    
+    // Cleanup function to prevent state updates on unmounted component
+    return () => abortController.abort();
   }, [id, user]);
 
   const handleBook = async () => {
-    if (!event || !user) return;
+    // SECURITY: Validate all required data before proceeding
+    if (!event?.id || !user?.id) {
+      console.error('Missing required booking data');
+      return;
+    }
+    
     if (isBooked) {
       navigate('/student/events'); // Go to My Events
       return;
     }
 
+    // Prevent booking if no slots available
+    if (event.availableSlots <= 0) {
+      alert('Sorry, this event is fully booked.');
+      return;
+    }
+
+    // Prevent double-click / race condition
+    if (bookingLoading) return;
+
     setBookingLoading(true);
     try {
-      await backend.createBooking(user.id, event.id);
+      await createBooking(user.id, event.id);
       navigate('/student/booking-success', { state: { event } });
     } catch (e) {
-      alert((e as Error).message);
+      // SECURITY: Don't expose internal error details to users
+      const error = e as Error;
+      console.error('Booking error:', error);
+      alert(error.message.includes('already') 
+        ? error.message 
+        : 'Unable to complete booking. Please try again.');
     } finally {
       setBookingLoading(false);
     }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { backend } from '../../services/mockBackend';
+import { getEvents, getUserBookings, subscribeToEvents } from '../../services/backend';
 import { Event, EventStatus, EventCategory, Booking } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../App';
@@ -25,17 +25,29 @@ export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) 
 
   const fetchEvents = async () => {
     setLoading(true);
-    const allEvents = await backend.getEvents();
-    setEvents(allEvents);
-    if (user) {
-      const userBookings = await backend.getUserBookings(user.id);
-      setBookings(userBookings);
+    try {
+      const allEvents = await getEvents();
+      setEvents(allEvents);
+      if (user) {
+        const userBookings = await getUserBookings(user.id);
+        setBookings(userBookings);
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
     }
     setLoading(false);
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchEvents();
+    
+    // Subscribe to real-time updates
+    const unsubscribe = subscribeToEvents((updatedEvents) => {
+      setEvents(updatedEvents);
+    });
+
+    return () => unsubscribe();
   }, [user]);
 
   const bookedEventIds = bookings.map(b => b.eventId);

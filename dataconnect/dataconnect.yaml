@@ -1,0 +1,17 @@
+# Firebase Data Connect configuration
+# This configures the connection between Firebase and Cloud SQL PostgreSQL
+
+specVersion: "v1beta"
+serviceId: "fiem-project"
+location: "asia-south1"
+
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "fiem-event-app"
+      cloudSql:
+        instanceId: "fiem-event"
+
+connectorDirs: 
+  - "./connector"

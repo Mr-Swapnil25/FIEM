@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { backend } from '../../services/mockBackend';
+import { getEvents, getAdminStats } from '../../services/backend';
 import { Event } from '../../types';
 import { useAuth } from '../../App';
 
@@ -13,10 +13,12 @@ export default function AdminProfile() {
 
   useEffect(() => {
     // Count active events
-    backend.getEvents().then((events: Event[]) => {
+    getEvents().then((events: Event[]) => {
       const now = new Date();
       const active = events.filter(e => new Date(e.eventDate) >= now && e.status === 'published');
       setActiveEvents(active.length);
+    }).catch(error => {
+      console.error('Error fetching events:', error);
     });
   }, []);
 

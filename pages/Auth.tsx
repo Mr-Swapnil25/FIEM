@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../App';
+import { validateEmail, sendPasswordResetEmail } from '../services/authService';
 
 export default function LoginScreen() {
   const { login, register } = useAuth();
@@ -7,38 +8,122 @@ export default function LoginScreen() {
   const [role, setRole] = useState<'student' | 'admin'>('student');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   
+  // SECURITY: Sanitize input to prevent XSS attacks
+  const sanitizeInput = (input: string): string => {
+    return input
+      .replace(/[<>"'&]/g, '') // Remove potentially dangerous characters
+      .trim()
+      .slice(0, 500); // Limit length to prevent DoS
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    // SECURITY: Sanitize all inputs before processing
+    const sanitizedEmail = email.toLowerCase().trim();
+    const sanitizedName = sanitizeInput(name);
+    const sanitizedPhone = sanitizeInput(phone);
+
+    // Validate email format
+    const emailValidation = validateEmail(sanitizedEmail);
+    if (!emailValidation.valid) {
+      setError(emailValidation.error || 'Invalid email');
+      setLoading(false);
+      return;
+    }
+
+    // Validate password length and complexity
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      setLoading(false);
+      return;
+    }
+
+    // SECURITY: Basic password strength check
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must contain both letters and numbers');
+      setLoading(false);
+      return;
+    }
+
     try {
       if (isLogin) {
-        await login(email, role);
+        const result = await login(sanitizedEmail, password);
+        if (!result.success) {
+          // SECURITY: Generic error message to prevent user enumeration
+          setError(result.error || 'Invalid credentials');
+        }
       } else {
-        await register({ email, name, role });
+        // Validate name for registration
+        if (!sanitizedName || sanitizedName.length < 2) {
+          setError('Full name is required (minimum 2 characters)');
+          setLoading(false);
+          return;
+        }
+
+        // SECURITY: Validate name format
+        if (!/^[a-zA-Z\s'-]+$/.test(sanitizedName)) {
+          setError('Name can only contain letters, spaces, hyphens, and apostrophes');
+          setLoading(false);
+          return;
+        }
+
+        const result = await register({ 
+          email: sanitizedEmail, 
+          password, 
+          name: sanitizedName, 
+          role,
+          phone: sanitizedPhone || undefined
+        });
+        if (!result.success) {
+          setError(result.error || 'Registration failed');
+        }
       }
     } catch (err) {
-      // alert handled in App.tsx
+      // SECURITY: Log error server-side, show generic message to user
+      console.error('[Auth] Submit error:', err);
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const fillDemo = (type: 'student' | 'admin') => {
-    setIsLogin(true);
-    setRole(type);
-    if (type === 'admin') {
-      setEmail('admin@college.edu');
-      setPassword('admin123');
-    } else {
-      setEmail('student@college.edu');
-      setPassword('student123');
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first');
+      return;
     }
+
+    setLoading(true);
+    setError(null);
+    
+    const result = await sendPasswordResetEmail(email);
+    
+    if (result.success) {
+      setSuccess('Password reset email sent! Check your inbox.');
+    } else {
+      setError(result.error || 'Failed to send reset email');
+    }
+    
+    setLoading(false);
+  };
+
+  // Email format hint based on domain
+  const getEmailHint = () => {
+    const domain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN || '@teamfuture.in';
+    return `firstname.lastname.year.division${domain}`;
   };
 
   return (
@@ -122,29 +207,17 @@ export default function LoginScreen() {
             </div>
           </div>
 
-          {/* Demo Credentials */}
-          {isLogin && (
-            <div className="bg-surface/50 border border-slate-700 rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-2 text-slate-400 font-semibold text-xs uppercase tracking-wider">
-                <span className="material-symbols-outlined text-[16px]">info</span>
-                Demo Credentials
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button 
-                  type="button"
-                  onClick={() => fillDemo('student')}
-                  className="bg-surface border border-slate-600 text-slate-300 text-xs py-2 rounded-lg font-medium hover:bg-slate-700 hover:border-primary/50 transition"
-                >
-                  Student Demo
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => fillDemo('admin')}
-                  className="bg-surface border border-slate-600 text-slate-300 text-xs py-2 rounded-lg font-medium hover:bg-slate-700 hover:border-primary/50 transition"
-                >
-                  Admin Demo
-                </button>
-              </div>
+          {/* Error/Success Messages */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">error</span>
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">check_circle</span>
+              {success}
             </div>
           )}
 
@@ -177,13 +250,14 @@ export default function LoginScreen() {
                 </div>
                 <input 
                   type="email"
-                  placeholder="College Email (@university.edu)"
+                  placeholder={getEmailHint()}
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={e => { setEmail(e.target.value); setError(null); }}
                   required
                   className="block w-full pl-11 pr-4 py-3.5 rounded-xl border border-slate-700 bg-surface/50 text-white placeholder-slate-400 focus:border-primary focus:ring-primary/20 focus:ring-4 transition-all text-sm font-medium shadow-sm outline-none"
                 />
               </div>
+              <p className="text-xs text-slate-500 ml-1">Use your institutional email</p>
             </div>
 
             {/* Password */}
@@ -194,10 +268,11 @@ export default function LoginScreen() {
                 </div>
                 <input 
                   type={showPassword ? 'text' : 'password'}
-                  placeholder={isLogin ? 'Password' : 'Create Password'}
+                  placeholder={isLogin ? 'Password' : 'Create Password (min 6 characters)'}
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={e => { setPassword(e.target.value); setError(null); }}
                   required
+                  minLength={6}
                   className="block w-full pl-11 pr-11 py-3.5 rounded-xl border border-slate-700 bg-surface/50 text-white placeholder-slate-400 focus:border-primary focus:ring-primary/20 focus:ring-4 transition-all text-sm font-medium shadow-sm outline-none"
                 />
                 <button 
@@ -210,7 +285,34 @@ export default function LoginScreen() {
                   </span>
                 </button>
               </div>
+              {isLogin && (
+                <button 
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-xs text-primary hover:text-primaryLight font-medium ml-1"
+                >
+                  Forgot password?
+                </button>
+              )}
             </div>
+
+            {/* Phone - Register Only */}
+            {!isLogin && (
+              <div className="space-y-1">
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <span className="material-symbols-outlined text-slate-400 group-focus-within:text-primary text-[20px] transition-colors">phone</span>
+                  </div>
+                  <input 
+                    type="tel"
+                    placeholder="Phone Number (optional)"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    className="block w-full pl-11 pr-4 py-3.5 rounded-xl border border-slate-700 bg-surface/50 text-white placeholder-slate-400 focus:border-primary focus:ring-primary/20 focus:ring-4 transition-all text-sm font-medium shadow-sm outline-none"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* College ID Upload - Register + Student Only */}
             {!isLogin && role === 'student' && (

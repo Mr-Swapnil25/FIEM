@@ -1,0 +1,127 @@
+type User @table {
+  id: UUID! @default(expr: "uuidV4()")
+  email: String! @unique
+  displayName: String
+  role: String! @default(value: "student")
+  emailDomain: String
+  firstName: String
+  lastName: String
+  year: String
+  division: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+type Category @table {
+  id: UUID! @default(expr: "uuidV4()")
+  name: String!
+  description: String
+  icon: String
+  color: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Event @table {
+  id: UUID! @default(expr: "uuidV4()")
+  title: String!
+  description: String!
+  shortDescription: String
+  date: Date!
+  time: String!
+  endTime: String
+  location: String!
+  venue: String
+  imageUrl: String
+  categoryId: String!
+  categoryName: String
+  organizerId: String!
+  organizerName: String
+  capacity: Int!
+  registeredCount: Int! @default(value: 0)
+  price: Float! @default(value: 0)
+  isFree: Boolean! @default(value: true)
+  status: String! @default(value: "draft")
+  featured: Boolean! @default(value: false)
+  requiresApproval: Boolean! @default(value: false)
+  tags: [String!]
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+type Booking @table {
+  id: UUID! @default(expr: "uuidV4()")
+  eventId: String!
+  eventTitle: String!
+  userId: String!
+  userName: String!
+  userEmail: String!
+  status: String! @default(value: "confirmed")
+  ticketId: String! @unique
+  qrCode: String
+  checkInTime: Timestamp
+  numberOfTickets: Int! @default(value: 1)
+  totalAmount: Float! @default(value: 0)
+  paymentStatus: String! @default(value: "pending")
+  paymentId: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+type Review @table {
+  id: UUID! @default(expr: "uuidV4()")
+  eventId: String!
+  userId: String!
+  userName: String!
+  rating: Int!
+  comment: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Notification @table {
+  id: UUID! @default(expr: "uuidV4()")
+  userId: String!
+  title: String!
+  message: String!
+  type: String!
+  read: Boolean! @default(value: false)
+  eventId: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type FavoriteEvent @table {
+  id: UUID! @default(expr: "uuidV4()")
+  userId: String!
+  eventId: String!
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type CheckInLog @table {
+  id: UUID! @default(expr: "uuidV4()")
+  bookingId: String!
+  eventId: String!
+  userId: String!
+  checkedInBy: String!
+  checkedInAt: Timestamp! @default(expr: "request.time")
+  method: String! @default(value: "qr")
+}
+
+type EventAnnouncement @table {
+  id: UUID! @default(expr: "uuidV4()")
+  eventId: String!
+  title: String!
+  message: String!
+  createdBy: String!
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type PaymentTransaction @table {
+  id: UUID! @default(expr: "uuidV4()")
+  bookingId: String!
+  userId: String!
+  amount: Float!
+  currency: String! @default(value: "INR")
+  status: String!
+  gatewayTransactionId: String
+  gatewayResponse: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}

@@ -1,0 +1,298 @@
+mutation CreateUser(
+  $email: String!
+  $displayName: String
+  $role: String!
+  $emailDomain: String
+  $firstName: String
+  $lastName: String
+  $year: String
+  $division: String
+) @auth(level: PUBLIC) {
+  user_insert(data: {
+    email: $email
+    displayName: $displayName
+    role: $role
+    emailDomain: $emailDomain
+    firstName: $firstName
+    lastName: $lastName
+    year: $year
+    division: $division
+  })
+}
+
+mutation UpdateUser(
+  $id: UUID!
+  $displayName: String
+  $firstName: String
+  $lastName: String
+  $year: String
+  $division: String
+) @auth(level: USER) {
+  user_update(id: $id, data: {
+    displayName: $displayName
+    firstName: $firstName
+    lastName: $lastName
+    year: $year
+    division: $division
+  })
+}
+
+mutation CreateCategory(
+  $name: String!
+  $description: String
+  $icon: String
+  $color: String
+) @auth(level: USER) {
+  category_insert(data: {
+    name: $name
+    description: $description
+    icon: $icon
+    color: $color
+  })
+}
+
+mutation CreateEvent(
+  $title: String!
+  $description: String!
+  $shortDescription: String
+  $date: Date!
+  $time: String!
+  $endTime: String
+  $location: String!
+  $venue: String
+  $imageUrl: String
+  $categoryId: String!
+  $categoryName: String
+  $organizerId: String!
+  $organizerName: String
+  $capacity: Int!
+  $price: Float
+  $isFree: Boolean
+  $status: String
+  $featured: Boolean
+  $requiresApproval: Boolean
+  $tags: [String!]
+) @auth(level: USER) {
+  event_insert(data: {
+    title: $title
+    description: $description
+    shortDescription: $shortDescription
+    date: $date
+    time: $time
+    endTime: $endTime
+    location: $location
+    venue: $venue
+    imageUrl: $imageUrl
+    categoryId: $categoryId
+    categoryName: $categoryName
+    organizerId: $organizerId
+    organizerName: $organizerName
+    capacity: $capacity
+    price: $price
+    isFree: $isFree
+    status: $status
+    featured: $featured
+    requiresApproval: $requiresApproval
+    tags: $tags
+  })
+}
+
+mutation UpdateEvent(
+  $id: UUID!
+  $title: String
+  $description: String
+  $shortDescription: String
+  $date: Date
+  $time: String
+  $endTime: String
+  $location: String
+  $venue: String
+  $imageUrl: String
+  $categoryId: String
+  $categoryName: String
+  $capacity: Int
+  $registeredCount: Int
+  $price: Float
+  $isFree: Boolean
+  $status: String
+  $featured: Boolean
+  $requiresApproval: Boolean
+  $tags: [String!]
+) @auth(level: USER) {
+  event_update(id: $id, data: {
+    title: $title
+    description: $description
+    shortDescription: $shortDescription
+    date: $date
+    time: $time
+    endTime: $endTime
+    location: $location
+    venue: $venue
+    imageUrl: $imageUrl
+    categoryId: $categoryId
+    categoryName: $categoryName
+    capacity: $capacity
+    registeredCount: $registeredCount
+    price: $price
+    isFree: $isFree
+    status: $status
+    featured: $featured
+    requiresApproval: $requiresApproval
+    tags: $tags
+  })
+}
+
+mutation DeleteEvent($id: UUID!) @auth(level: USER) {
+  event_delete(id: $id)
+}
+
+mutation CreateBooking(
+  $eventId: String!
+  $eventTitle: String!
+  $userId: String!
+  $userName: String!
+  $userEmail: String!
+  $ticketId: String!
+  $qrCode: String
+  $numberOfTickets: Int
+  $totalAmount: Float
+  $status: String
+  $paymentStatus: String
+) @auth(level: USER) {
+  booking_insert(data: {
+    eventId: $eventId
+    eventTitle: $eventTitle
+    userId: $userId
+    userName: $userName
+    userEmail: $userEmail
+    ticketId: $ticketId
+    qrCode: $qrCode
+    numberOfTickets: $numberOfTickets
+    totalAmount: $totalAmount
+    status: $status
+    paymentStatus: $paymentStatus
+  })
+}
+
+mutation UpdateBooking(
+  $id: UUID!
+  $status: String
+  $checkInTime: Timestamp
+  $paymentStatus: String
+  $paymentId: String
+) @auth(level: USER) {
+  booking_update(id: $id, data: {
+    status: $status
+    checkInTime: $checkInTime
+    paymentStatus: $paymentStatus
+    paymentId: $paymentId
+  })
+}
+
+mutation CancelBooking($id: UUID!) @auth(level: USER) {
+  booking_update(id: $id, data: {
+    status: "cancelled"
+  })
+}
+
+mutation CreateReview(
+  $eventId: String!
+  $userId: String!
+  $userName: String!
+  $rating: Int!
+  $comment: String
+) @auth(level: USER) {
+  review_insert(data: {
+    eventId: $eventId
+    userId: $userId
+    userName: $userName
+    rating: $rating
+    comment: $comment
+  })
+}
+
+mutation CreateNotification(
+  $userId: String!
+  $title: String!
+  $message: String!
+  $type: String!
+  $eventId: String
+) @auth(level: USER) {
+  notification_insert(data: {
+    userId: $userId
+    title: $title
+    message: $message
+    type: $type
+    eventId: $eventId
+  })
+}
+
+mutation MarkNotificationRead($id: UUID!) @auth(level: USER) {
+  notification_update(id: $id, data: {
+    read: true
+  })
+}
+
+mutation AddFavorite(
+  $userId: String!
+  $eventId: String!
+) @auth(level: USER) {
+  favoriteEvent_insert(data: {
+    userId: $userId
+    eventId: $eventId
+  })
+}
+
+mutation RemoveFavorite($id: UUID!) @auth(level: USER) {
+  favoriteEvent_delete(id: $id)
+}
+
+mutation CreateCheckInLog(
+  $bookingId: String!
+  $eventId: String!
+  $userId: String!
+  $checkedInBy: String!
+  $method: String
+) @auth(level: USER) {
+  checkInLog_insert(data: {
+    bookingId: $bookingId
+    eventId: $eventId
+    userId: $userId
+    checkedInBy: $checkedInBy
+    method: $method
+  })
+}
+
+mutation CreateEventAnnouncement(
+  $eventId: String!
+  $title: String!
+  $message: String!
+  $createdBy: String!
+) @auth(level: USER) {
+  eventAnnouncement_insert(data: {
+    eventId: $eventId
+    title: $title
+    message: $message
+    createdBy: $createdBy
+  })
+}
+
+mutation CreatePaymentTransaction(
+  $bookingId: String!
+  $userId: String!
+  $amount: Float!
+  $currency: String
+  $status: String!
+  $gatewayTransactionId: String
+  $gatewayResponse: String
+) @auth(level: USER) {
+  paymentTransaction_insert(data: {
+    bookingId: $bookingId
+    userId: $userId
+    amount: $amount
+    currency: $currency
+    status: $status
+    gatewayTransactionId: $gatewayTransactionId
+    gatewayResponse: $gatewayResponse
+  })
+}

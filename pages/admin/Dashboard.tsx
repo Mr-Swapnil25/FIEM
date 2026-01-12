@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { backend } from '../../services/mockBackend';
+import { getAdminStats, getEvents, subscribeToEvents, deleteEvent } from '../../services/backend';
 import { Event, EventStatus } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -15,17 +15,29 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
-      const allEvents = await backend.getEvents();
-      setEvents(allEvents);
+      try {
+        const allEvents = await getEvents();
+        setEvents(allEvents);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      }
       setLoading(false);
     };
+    
     fetchEvents();
+    
+    // Subscribe to real-time updates
+    const unsubscribe = subscribeToEvents((updatedEvents) => {
+      setEvents(updatedEvents);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleDelete = async (eventId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this event?')) {
-      await backend.deleteEvent(eventId);
+      await deleteEvent(eventId);
       setEvents(events.filter(ev => ev.id !== eventId));
     }
   };

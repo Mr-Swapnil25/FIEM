@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { backend } from '../../services/mockBackend';
+import { getParticipantDetails, checkInParticipant, cancelBooking } from '../../services/backend';
 import { Booking, Event, User } from '../../types';
+import { useAuth } from '../../App';
 
 interface ParticipantData {
   booking: Booking;
@@ -13,6 +14,7 @@ export default function ParticipantDetails() {
   const navigate = useNavigate();
   const location = useLocation();
   const { bookingId } = useParams<{ bookingId: string }>();
+  const { user: currentUser } = useAuth();
   const [data, setData] = useState<ParticipantData | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
@@ -23,7 +25,7 @@ export default function ParticipantDetails() {
       if (!bookingId) return;
       try {
         setLoading(true);
-        const participantData = await backend.getParticipantDetails(bookingId);
+        const participantData = await getParticipantDetails(bookingId);
         setData(participantData);
       } catch (error) {
         console.error('Error fetching participant details:', error);
@@ -35,12 +37,12 @@ export default function ParticipantDetails() {
   }, [bookingId]);
 
   const handleCheckIn = async () => {
-    if (!data || !bookingId) return;
+    if (!data || !bookingId || !currentUser?.id) return;
     try {
       setCheckingIn(true);
-      await backend.checkInParticipant(bookingId);
+      await checkInParticipant(bookingId, currentUser.id, 'manual');
       // Refresh data after check-in
-      const updatedData = await backend.getParticipantDetails(bookingId);
+      const updatedData = await getParticipantDetails(bookingId);
       setData(updatedData);
     } catch (error) {
       alert((error as Error).message);
@@ -56,10 +58,10 @@ export default function ParticipantDetails() {
   };
 
   const handleCancelBooking = async () => {
-    if (!data || !bookingId) return;
+    if (!data || !bookingId || !data.event?.id) return;
     if (!confirm('Are you sure you want to cancel this booking?')) return;
     try {
-      await backend.cancelBooking(bookingId);
+      await cancelBooking(bookingId, data.event.id);
       navigate(-1);
     } catch (error) {
       alert((error as Error).message);
