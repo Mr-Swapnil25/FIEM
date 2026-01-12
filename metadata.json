@@ -1,0 +1,5 @@
+{
+  "name": "EventEase",
+  "description": "A comprehensive college event management platform allowing students to book events and admins to manage them. Features role-based access, real-time slot tracking, and digital ticketing.",
+  "requestFramePermissions": []
+}
