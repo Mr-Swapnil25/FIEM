@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { backend } from '../../services/mockBackend';
 import { Event, Booking } from '../../types';
-import { Download, Search, CheckCircle, Users, Calendar, FileText, Filter } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function Reports() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -9,6 +9,9 @@ export default function Reports() {
   const [participants, setParticipants] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showEventSelector, setShowEventSelector] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     backend.getEvents().then(data => {
@@ -34,177 +37,262 @@ export default function Reports() {
     p.userEmail?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleExport = () => {
+    alert('Export feature coming soon!');
+  };
+
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reports & Attendees</h1>
-          <p className="text-gray-500 text-sm">View and export participant data for your events</p>
-        </div>
-        <button className="flex items-center px-4 py-2 bg-primary text-white rounded-xl hover:bg-primaryLight transition shadow-sm">
-          <Download size={18} className="mr-2" /> Export All Data
-        </button>
+    <div className="relative min-h-screen bg-[#0B0E14] text-slate-200 font-display antialiased">
+      {/* Background Gradient Effects */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-indigo-900/10 blur-[120px]"></div>
+        <div className="absolute bottom-[10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-blue-900/10 blur-[100px]"></div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Event Selector Sidebar */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
-            <div className="px-4 py-3 border-b border-gray-100">
-              <h3 className="font-bold text-gray-800 text-sm flex items-center">
-                <Calendar size={16} className="mr-2 text-gray-400" /> Select Event
-              </h3>
+      <div className="relative z-10 flex flex-col min-h-screen pb-[120px]">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-40 flex items-center justify-between px-5 py-4 bg-[#0B0E14]/80 backdrop-blur-xl border-b border-white/5">
+          <button 
+            onClick={() => navigate(-1)}
+            className="flex items-center justify-center w-10 h-10 rounded-full text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <h1 className="text-lg font-bold text-white tracking-wide">Reports</h1>
+          <button 
+            onClick={handleExport}
+            className="flex items-center justify-center w-10 h-10 rounded-full text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <span className="material-symbols-outlined">download</span>
+          </button>
+        </div>
+
+        {/* Event Selector */}
+        <div className="px-5 py-4">
+          <button 
+            onClick={() => setShowEventSelector(!showEventSelector)}
+            className="w-full flex items-center justify-between p-4 bg-[#151921] rounded-xl border border-white/5 hover:border-indigo-500/30 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-indigo-400">event</span>
+              <div className="text-left">
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Selected Event</p>
+                <p className="text-sm font-semibold text-white truncate max-w-[200px]">
+                  {selectedEvent?.title || 'Select an event'}
+                </p>
+              </div>
             </div>
-            <div className="max-h-96 overflow-y-auto">
+            <span className={`material-symbols-outlined text-slate-400 transition-transform ${showEventSelector ? 'rotate-180' : ''}`}>
+              expand_more
+            </span>
+          </button>
+
+          {/* Event Dropdown */}
+          {showEventSelector && (
+            <div className="mt-2 bg-[#151921] rounded-xl border border-white/5 overflow-hidden max-h-64 overflow-y-auto">
               {events.map(e => (
                 <button
                   key={e.id}
-                  onClick={() => setSelectedEventId(e.id)}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-50 transition ${
+                  onClick={() => {
+                    setSelectedEventId(e.id);
+                    setShowEventSelector(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 border-b border-white/5 transition flex items-center justify-between ${
                     selectedEventId === e.id 
-                      ? 'bg-primary/5 border-l-4 border-l-primary' 
-                      : 'hover:bg-gray-50'
+                      ? 'bg-indigo-500/10 border-l-2 border-l-indigo-500' 
+                      : 'hover:bg-white/5'
                   }`}
                 >
-                  <p className={`font-medium text-sm truncate ${selectedEventId === e.id ? 'text-primary' : 'text-gray-800'}`}>
-                    {e.title}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {new Date(e.eventDate).toLocaleDateString()}
-                  </p>
+                  <div>
+                    <p className={`font-medium text-sm truncate ${selectedEventId === e.id ? 'text-indigo-400' : 'text-white'}`}>
+                      {e.title}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {new Date(e.eventDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  {selectedEventId === e.id && (
+                    <span className="material-symbols-outlined text-indigo-400 text-[20px]">check</span>
+                  )}
                 </button>
               ))}
             </div>
+          )}
+        </div>
+
+        {/* Stats Cards */}
+        {selectedEvent && (
+          <div className="grid grid-cols-3 gap-3 px-5 mb-4">
+            <div className="bg-[#151921] p-4 rounded-xl border border-white/5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-blue-400 text-[18px]">group</span>
+                <span className="text-[10px] text-slate-500 uppercase font-bold">Total</span>
+              </div>
+              <p className="text-2xl font-bold text-white">{participants.length}</p>
+            </div>
+            <div className="bg-[#151921] p-4 rounded-xl border border-white/5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-emerald-400 text-[18px]">check_circle</span>
+                <span className="text-[10px] text-slate-500 uppercase font-bold">Confirmed</span>
+              </div>
+              <p className="text-2xl font-bold text-white">
+                {participants.filter(p => p.status === 'confirmed').length}
+              </p>
+            </div>
+            <div className="bg-[#151921] p-4 rounded-xl border border-white/5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-amber-400 text-[18px]">event_seat</span>
+                <span className="text-[10px] text-slate-500 uppercase font-bold">Slots</span>
+              </div>
+              <p className="text-2xl font-bold text-white">{selectedEvent.availableSlots}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Search Bar */}
+        <div className="px-5 mb-4">
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[20px]">search</span>
+            <input
+              type="text"
+              placeholder="Search participants..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#151921] border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
+            />
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="lg:col-span-3 space-y-6">
-          {/* Stats Cards */}
-          {selectedEvent && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                <div className="flex items-center">
-                  <div className="p-3 bg-blue-50 rounded-lg mr-4">
-                    <Users size={20} className="text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium uppercase">Total Registrations</p>
-                    <p className="text-2xl font-bold text-gray-900">{participants.length}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                <div className="flex items-center">
-                  <div className="p-3 bg-green-50 rounded-lg mr-4">
-                    <CheckCircle size={20} className="text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium uppercase">Confirmed</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {participants.filter(p => p.status === 'confirmed').length}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                <div className="flex items-center">
-                  <div className="p-3 bg-purple-50 rounded-lg mr-4">
-                    <FileText size={20} className="text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium uppercase">Available Slots</p>
-                    <p className="text-2xl font-bold text-gray-900">{selectedEvent.availableSlots}</p>
-                  </div>
-                </div>
-              </div>
+        {/* Participants List */}
+        <div className="px-5 flex-1">
+          <div className="bg-[#151921] rounded-2xl border border-white/5 overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+              <h3 className="font-semibold text-white text-sm">Participants</h3>
+              <span className="text-xs text-slate-500">{filteredParticipants.length} found</span>
             </div>
-          )}
 
-          {/* Participants Table */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <h3 className="font-bold text-gray-800">Participants List</h3>
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search participants..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary w-64"
-                  />
-                </div>
-                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg">
-                  <Download size={18} />
-                </button>
-              </div>
-            </div>
-            
             {loading ? (
               <div className="p-12 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                <p className="text-gray-400 mt-4">Loading participants...</p>
+                <span className="material-symbols-outlined animate-spin text-indigo-400 text-[32px]">progress_activity</span>
+                <p className="text-slate-500 mt-4 text-sm">Loading participants...</p>
               </div>
             ) : filteredParticipants.length === 0 ? (
-              <div className="p-12 text-center text-gray-400">
-                <Users size={40} className="mx-auto mb-4 opacity-30" />
-                <p>{searchTerm ? 'No matching participants found.' : 'No registrations yet.'}</p>
+              <div className="p-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
+                  <span className="material-symbols-outlined text-slate-500 text-[32px]">group_off</span>
+                </div>
+                <p className="text-slate-500 text-sm">
+                  {searchTerm ? 'No matching participants found.' : 'No registrations yet.'}
+                </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Participant</th>
-                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ticket ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Booked At</th>
-                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredParticipants.map(p => (
-                      <tr key={p.id} className="hover:bg-gray-50 transition">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm mr-3">
-                              {p.userName?.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-sm text-gray-900">{p.userName}</p>
-                              <p className="text-xs text-gray-500">{p.userEmail}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="font-mono text-sm text-gray-600">{p.ticketId}</span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          {new Date(p.bookedAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full font-medium ${
-                            p.status === 'confirmed' 
-                              ? 'bg-green-100 text-green-700' 
-                              : p.status === 'checked_in'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {p.status === 'confirmed' && <CheckCircle size={12} className="mr-1" />}
-                            {p.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+              <div className="divide-y divide-white/5">
+                {filteredParticipants.map(p => (
+                  <div 
+                    key={p.id} 
+                    onClick={() => navigate(`/admin/participant/${p.id}`)}
+                    className="p-4 flex items-center gap-4 hover:bg-white/5 transition-colors cursor-pointer"
+                  >
+                    {/* Avatar */}
+                    <div className="w-12 h-12 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-lg shrink-0">
+                      {p.userName?.charAt(0).toUpperCase()}
+                    </div>
+                    
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-white text-sm truncate">{p.userName}</p>
+                      <p className="text-xs text-slate-500 truncate">{p.userEmail}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[10px] font-mono text-slate-500">{p.ticketId}</span>
+                        <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                          p.status === 'confirmed' 
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                            : p.status === 'checked_in'
+                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                            : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                        }`}>
+                          {p.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Amount & Arrow */}
+                    <div className="flex items-center gap-3">
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold text-white">
                           {p.amountPaid === 0 ? 'Free' : `$${p.amountPaid}`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {new Date(p.bookedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className="material-symbols-outlined text-slate-500 text-[18px]">chevron_right</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Bottom Navigation */}
+        <div className="fixed bottom-0 w-full z-50">
+          {/* Gradient fade */}
+          <div className="h-8 w-full bg-gradient-to-b from-transparent to-[#0B0E14] pointer-events-none"></div>
+          <div className="bg-[#151c2b] border-t border-slate-800 pb-6 pt-2">
+            <div className="flex justify-around items-center px-4">
+              <button 
+                onClick={() => navigate('/admin/dashboard')}
+                className={`flex flex-col items-center gap-1 min-w-[64px] transition-colors ${
+                  location.pathname === '/admin/dashboard' ? 'text-primary' : 'text-slate-400 hover:text-primary'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[24px]">dashboard</span>
+                <span className="text-[10px] font-medium">Dashboard</span>
+              </button>
+              <button 
+                onClick={() => navigate('/admin/events')}
+                className={`flex flex-col items-center gap-1 min-w-[64px] transition-colors ${
+                  location.pathname === '/admin/events' ? 'text-primary' : 'text-slate-400 hover:text-primary'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[24px]">event</span>
+                <span className="text-[10px] font-medium">Events</span>
+              </button>
+              
+              {/* Center QR Scan Button */}
+              <button 
+                onClick={() => navigate('/admin/scan-ticket')}
+                className="flex flex-col items-center gap-1 min-w-[64px] -mt-8 transition-all"
+              >
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 border-4 border-[#151c2b] hover:scale-105 active:scale-95 transition-transform">
+                  <span className="material-symbols-outlined text-[26px] text-white" style={{ fontVariationSettings: "'FILL' 1" }}>qr_code_scanner</span>
+                </div>
+                <span className="text-[10px] font-medium text-primary">Scan</span>
+              </button>
+              
+              <button 
+                onClick={() => navigate('/admin/reports')}
+                className={`flex flex-col items-center gap-1 min-w-[64px] transition-colors ${
+                  location.pathname === '/admin/reports' ? 'text-primary' : 'text-slate-400 hover:text-primary'
+                }`}
+              >
+                <span 
+                  className="material-symbols-outlined text-[24px]"
+                  style={{ fontVariationSettings: location.pathname === '/admin/reports' ? "'FILL' 1" : "'FILL' 0" }}
+                >group</span>
+                <span className="text-[10px] font-medium">Attendees</span>
+              </button>
+              <button 
+                onClick={() => navigate('/admin/profile')}
+                className={`flex flex-col items-center gap-1 min-w-[64px] transition-colors ${
+                  location.pathname === '/admin/profile' ? 'text-primary' : 'text-slate-400 hover:text-primary'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[24px]">settings</span>
+                <span className="text-[10px] font-medium">Settings</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

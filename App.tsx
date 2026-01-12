@@ -20,6 +20,11 @@ import StudentProfile from './pages/student/Profile';
 import AdminDashboard from './pages/admin/Dashboard';
 import CreateEditEvent from './pages/admin/CreateEditEvent';
 import Reports from './pages/admin/Reports';
+import AdminProfile from './pages/admin/Profile';
+import AdminEvents from './pages/admin/Events';
+import ParticipantDetails from './pages/admin/ParticipantDetails';
+import EventPublishSuccess from './pages/admin/EventPublishSuccess';
+import ScanTicket from './pages/admin/ScanTicket';
 
 // --- Auth Context ---
 interface AuthContextType {
@@ -47,7 +52,7 @@ const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   // Hide navbar on login and profile pages
-  if (!user || location.pathname === '/login' || location.pathname === '/student/profile' || location.pathname === '/student/home' || location.pathname === '/student/events') return null;
+  if (!user || location.pathname === '/login' || location.pathname === '/student/profile' || location.pathname === '/student/home' || location.pathname === '/student/events' || location.pathname === '/student/booking-success' || location.pathname.startsWith('/student/event/') || location.pathname === '/admin/dashboard' || location.pathname === '/admin/events' || location.pathname === '/admin/reports' || location.pathname === '/admin/profile' || location.pathname.startsWith('/admin/create-event') || location.pathname.startsWith('/admin/edit-event/') || location.pathname.startsWith('/admin/event-published') || location.pathname.startsWith('/admin/scan-ticket') || location.pathname.startsWith('/admin/participant/')) return null;
 
   const studentLinks = [
     { label: 'Home', path: '/student/home', icon: <Home size={20} /> },
@@ -235,7 +240,18 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
     location.pathname === '/login' || 
     location.pathname === '/student/profile' ||
     location.pathname === '/student/home' ||
-    location.pathname === '/student/events';
+    location.pathname === '/student/events' ||
+    location.pathname === '/student/booking-success' ||
+    location.pathname.startsWith('/student/event/') ||
+    location.pathname === '/admin/dashboard' ||
+    location.pathname === '/admin/events' ||
+    location.pathname === '/admin/reports' ||
+    location.pathname === '/admin/profile' ||
+    location.pathname.startsWith('/admin/create-event') ||
+    location.pathname.startsWith('/admin/edit-event/') ||
+    location.pathname.startsWith('/admin/event-published') ||
+    location.pathname.startsWith('/admin/scan-ticket') ||
+    location.pathname.startsWith('/admin/participant/');
 
   return (
     <div className={`min-h-screen flex flex-col font-sans ${!isFullScreenPage ? 'bg-slate-100' : ''}`}>
@@ -262,10 +278,14 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
           <Route path="/admin/*" element={user && user.role === 'admin' ? (
             <Routes>
               <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="events" element={<StudentHome isAdmin />} />
+              <Route path="events" element={<AdminEvents />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="profile" element={<AdminProfile />} />
               <Route path="create-event" element={<CreateEditEvent />} />
               <Route path="edit-event/:id" element={<CreateEditEvent />} />
+              <Route path="event-published" element={<EventPublishSuccess />} />
+              <Route path="scan-ticket" element={<ScanTicket />} />
+              <Route path="participant/:bookingId" element={<ParticipantDetails />} />
               <Route path="*" element={<Navigate to="dashboard" />} />
             </Routes>
           ) : <Navigate to="/login" />} />

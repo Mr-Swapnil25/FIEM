@@ -1,5 +1,21 @@
 {
   "name": "EventEase",
-  "description": "A comprehensive college event management platform allowing students to book events and admins to manage them. Features role-based access, real-time slot tracking, and digital ticketing.",
+  "tagline": "College Events, Simplified",
+  "description": "A comprehensive college event management platform allowing students to book events and admins to manage them. Features role-based access, real-time slot tracking, QR digital ticketing, and offline support.",
+  "shortDescription": "Discover, book & manage college events effortlessly with QR digital tickets",
+  "category": "Events & Tickets",
+  "targetAudience": "College students and event organizers",
+  "keywords": [
+    "college events",
+    "campus booking", 
+    "student app",
+    "event management",
+    "QR tickets",
+    "digital ticketing",
+    "university events",
+    "college fest",
+    "event registration",
+    "PWA"
+  ],
   "requestFramePermissions": []
 }

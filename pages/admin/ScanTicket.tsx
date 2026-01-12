@@ -1,0 +1,413 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { backend } from '../../services/mockBackend';
+import { User, Booking, Event } from '../../types';
+
+interface CheckedInData {
+  booking: Booking;
+  user: User;
+  event: Event;
+}
+
+export default function ScanTicket() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [flashOn, setFlashOn] = useState(false);
+  const [scanning, setScanning] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualId, setManualId] = useState('');
+  const [checkedInData, setCheckedInData] = useState<CheckedInData | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const scanLineRef = useRef<HTMLDivElement>(null);
+
+  // Get eventId from location state if provided
+  const eventId = (location.state as any)?.eventId;
+
+  // Animate scan line
+  useEffect(() => {
+    if (!scanning || checkedInData) return;
+    
+    const interval = setInterval(() => {
+      if (scanLineRef.current) {
+        const current = parseFloat(scanLineRef.current.style.top || '10%');
+        const next = current >= 85 ? 10 : current + 2;
+        scanLineRef.current.style.top = `${next}%`;
+      }
+    }, 30);
+
+    return () => clearInterval(interval);
+  }, [scanning, checkedInData]);
+
+  // Simulate QR code detection (in a real app, you'd use a camera library)
+  const simulateScan = async () => {
+    if (processing) return;
+    
+    setProcessing(true);
+    setError(null);
+    
+    try {
+      // Simulate scanning delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Get a random confirmed booking to simulate a scan
+      const allBookings = await backend.getEventParticipants(eventId || 'e1');
+      const confirmedBookings = allBookings.filter(b => b.status === 'confirmed');
+      
+      if (confirmedBookings.length === 0) {
+        throw new Error('No pending check-ins found');
+      }
+      
+      // Pick a random booking
+      const randomBooking = confirmedBookings[Math.floor(Math.random() * confirmedBookings.length)];
+      
+      // Check in the participant
+      await handleCheckIn(randomBooking.id);
+    } catch (err) {
+      setError((err as Error).message);
+      setProcessing(false);
+    }
+  };
+
+  const handleCheckIn = async (bookingId: string) => {
+    try {
+      setProcessing(true);
+      setError(null);
+      
+      // Get participant details first
+      const { booking, user, event } = await backend.getParticipantDetails(bookingId);
+      
+      if (!user || !event) {
+        throw new Error('Invalid ticket data');
+      }
+      
+      if (booking.status === 'checked_in') {
+        throw new Error('Participant already checked in');
+      }
+      
+      if (booking.status === 'cancelled') {
+        throw new Error('This booking has been cancelled');
+      }
+      
+      // Perform check-in
+      const updatedBooking = await backend.checkInParticipant(bookingId);
+      
+      // Show success modal
+      setCheckedInData({
+        booking: updatedBooking,
+        user,
+        event
+      });
+      setScanning(false);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleManualEntry = async () => {
+    if (!manualId.trim()) {
+      setError('Please enter a ticket ID');
+      return;
+    }
+    
+    setProcessing(true);
+    setError(null);
+    
+    try {
+      // Search for booking by ticket ID
+      const result = await backend.findBookingByTicketId(manualId.trim());
+      
+      if (!result) {
+        throw new Error('Ticket not found');
+      }
+      
+      await handleCheckIn(result.id);
+      setShowManualEntry(false);
+      setManualId('');
+    } catch (err) {
+      setError((err as Error).message);
+      setProcessing(false);
+    }
+  };
+
+  const handleDone = () => {
+    setCheckedInData(null);
+    setScanning(true);
+    setError(null);
+  };
+
+  const handleScanNext = () => {
+    setCheckedInData(null);
+    setScanning(true);
+    setError(null);
+  };
+
+  return (
+    <div className="font-display bg-[#101622] text-white h-screen w-full relative overflow-hidden flex flex-col">
+      {/* Camera Viewfinder Background - Simulated */}
+      <div className="absolute inset-0 z-0">
+        <div 
+          className="w-full h-full bg-cover bg-center"
+          style={{
+            backgroundImage: `linear-gradient(to bottom, rgba(16, 22, 34, 0.3), rgba(16, 22, 34, 0.5)), url('https://images.unsplash.com/photo-1492538368677-f6e0afe31dcc?w=800&h=1200&fit=crop')`,
+            filter: 'brightness(0.7)'
+          }}
+        />
+      </div>
+
+      {/* UI Overlay Container */}
+      <div className="relative z-10 w-full h-full flex flex-col justify-between">
+        {/* Top Bar */}
+        <div className="flex items-center justify-between p-4 pt-12 z-30 w-full bg-gradient-to-b from-black/60 to-transparent">
+          <div className="w-12 h-12"></div>
+          <h2 className="text-white text-lg font-bold leading-tight tracking-tight drop-shadow-md">
+            Scan Ticket
+          </h2>
+          <div className="flex w-12 items-center justify-end">
+            <button 
+              onClick={() => setFlashOn(!flashOn)}
+              className={`flex items-center justify-center w-10 h-10 rounded-full backdrop-blur-md border border-white/10 transition-colors ${
+                flashOn ? 'bg-[#135bec] text-white' : 'bg-white/10 text-white hover:bg-[#135bec]'
+              }`}
+            >
+              <span 
+                className="material-symbols-outlined text-xl" 
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                {flashOn ? 'flash_on' : 'flash_off'}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Central Scanner Area */}
+        <div className="flex-1 flex flex-col items-center justify-center relative w-full">
+          {/* Scanner Frame */}
+          <div 
+            onClick={simulateScan}
+            className="relative w-72 h-72 rounded-3xl z-20 flex items-center justify-center cursor-pointer"
+            style={{ boxShadow: '0 0 0 4000px rgba(16, 22, 34, 0.85)' }}
+          >
+            {/* Corner Indicators */}
+            <div className="absolute top-0 left-0 w-8 h-8 border-t-[5px] border-l-[5px] border-[#135bec] rounded-tl-2xl -mt-[2px] -ml-[2px] drop-shadow-[0_0_8px_rgba(19,91,236,0.6)]"></div>
+            <div className="absolute top-0 right-0 w-8 h-8 border-t-[5px] border-r-[5px] border-[#135bec] rounded-tr-2xl -mt-[2px] -mr-[2px] drop-shadow-[0_0_8px_rgba(19,91,236,0.6)]"></div>
+            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-[5px] border-l-[5px] border-[#135bec] rounded-bl-2xl -mb-[2px] -ml-[2px] drop-shadow-[0_0_8px_rgba(19,91,236,0.6)]"></div>
+            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-[5px] border-r-[5px] border-[#135bec] rounded-br-2xl -mb-[2px] -mr-[2px] drop-shadow-[0_0_8px_rgba(19,91,236,0.6)]"></div>
+
+            {/* Laser Scan Line */}
+            <div 
+              ref={scanLineRef}
+              className="absolute w-[90%] h-[2px] bg-gradient-to-r from-transparent via-[#135bec] to-transparent shadow-[0_0_15px_rgba(19,91,236,1)] opacity-90 transition-all"
+              style={{ top: '10%' }}
+            ></div>
+
+            {/* Inner Guide */}
+            <div className="absolute inset-4 border border-white/20 rounded-xl opacity-50"></div>
+
+            {/* Processing Indicator */}
+            {processing && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-3xl">
+                <span className="material-symbols-outlined text-[48px] text-[#135bec] animate-spin">
+                  progress_activity
+                </span>
+              </div>
+            )}
+
+            {/* Tap to scan hint */}
+            {!processing && (
+              <p className="text-white/60 text-sm font-medium">Tap to simulate scan</p>
+            )}
+          </div>
+
+          {/* Instruction Text */}
+          <div className="absolute mt-[24rem] z-30 px-6 w-full flex justify-center">
+            <div className="bg-black/40 backdrop-blur-sm px-5 py-3 rounded-xl border border-white/10 max-w-xs">
+              <p className="text-white text-base font-medium leading-snug text-center drop-shadow-sm">
+                {error ? (
+                  <span className="text-red-400">{error}</span>
+                ) : (
+                  'Align the QR code within the frame to check-in participant.'
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Actions */}
+        <div className="w-full px-6 pb-8 pt-4 z-30 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col gap-5">
+          {/* Manual Entry Link */}
+          <button 
+            onClick={() => setShowManualEntry(true)}
+            className="w-full text-center group"
+          >
+            <p className="text-[#92a4c9] text-sm font-medium leading-normal group-hover:text-white transition-colors underline underline-offset-4 decoration-white/20">
+              Trouble scanning? Enter ID manually.
+            </p>
+          </button>
+
+          {/* Cancel Button */}
+          <button 
+            onClick={() => navigate(-1)}
+            className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-5 bg-[#232f48] hover:bg-[#2c3b59] active:bg-[#1d273b] border border-white/5 text-white text-base font-bold leading-normal tracking-[0.015em] transition-all shadow-lg"
+          >
+            <span className="truncate">Cancel</span>
+          </button>
+
+          <div className="h-2"></div>
+        </div>
+      </div>
+
+      {/* Manual Entry Modal */}
+      {showManualEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+          <div 
+            className="absolute inset-0 bg-[#111722]/80 backdrop-blur-md"
+            onClick={() => setShowManualEntry(false)}
+          />
+          <div className="relative w-full max-w-sm bg-[#192233]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-4 text-center">Enter Ticket ID</h3>
+            
+            <input
+              type="text"
+              value={manualId}
+              onChange={(e) => setManualId(e.target.value.toUpperCase())}
+              placeholder="e.g. EVT-9982-XJ"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-white placeholder-slate-500 text-center text-lg font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-[#135bec] focus:border-transparent"
+            />
+
+            {error && (
+              <p className="text-red-400 text-sm text-center mt-3">{error}</p>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowManualEntry(false);
+                  setError(null);
+                  setManualId('');
+                }}
+                className="flex-1 h-12 rounded-xl bg-white/5 border border-white/10 text-slate-300 font-semibold hover:bg-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleManualEntry}
+                disabled={processing}
+                className="flex-1 h-12 rounded-xl bg-[#135bec] text-white font-bold hover:bg-blue-600 transition-colors disabled:opacity-50"
+              >
+                {processing ? 'Checking...' : 'Check In'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {checkedInData && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-[#111722]/60 backdrop-blur-md" />
+          
+          {/* Modal Card */}
+          <div 
+            className="relative w-full max-w-[340px] rounded-[32px] p-8 flex flex-col items-center text-center overflow-hidden"
+            style={{
+              background: 'rgba(25, 34, 51, 0.7)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+            }}
+          >
+            {/* Decorative Top Gradient Glow */}
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-[#135bec]/20 blur-[80px] rounded-full pointer-events-none"></div>
+
+            {/* Success Icon */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 rounded-full bg-green-500 blur-xl opacity-20 animate-pulse"></div>
+              <div className="relative flex items-center justify-center h-20 w-20 rounded-full bg-green-500/10 ring-1 ring-inset ring-green-400/30">
+                <span 
+                  className="material-symbols-outlined text-[40px] text-green-400"
+                  style={{ fontVariationSettings: "'FILL' 1, 'wght' 400" }}
+                >
+                  check_circle
+                </span>
+              </div>
+            </div>
+
+            {/* Status Headline */}
+            <h3 className="text-green-400 font-semibold text-sm tracking-widest uppercase mb-6 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+              Access Granted
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+            </h3>
+
+            {/* Student Avatar */}
+            <div className="mb-4 relative group">
+              <div className="absolute inset-0 rounded-full bg-[#135bec] blur-md opacity-40 group-hover:opacity-60 transition-opacity"></div>
+              <div className="relative h-28 w-28 p-1 rounded-full border-2 border-[#135bec] bg-[#192233]">
+                <div 
+                  className="h-full w-full rounded-full overflow-hidden bg-slate-700 bg-center bg-cover"
+                  style={{ 
+                    backgroundImage: checkedInData.user.avatarUrl 
+                      ? `url('${checkedInData.user.avatarUrl}')` 
+                      : 'linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%)'
+                  }}
+                >
+                  {!checkedInData.user.avatarUrl && (
+                    <div className="w-full h-full flex items-center justify-center text-white text-3xl font-bold">
+                      {checkedInData.user.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Verified Badge */}
+              <div className="absolute bottom-1 right-1 h-8 w-8 bg-[#101622] rounded-full flex items-center justify-center border-2 border-[#192233]">
+                <div className="h-6 w-6 bg-[#135bec] rounded-full flex items-center justify-center text-white">
+                  <span 
+                    className="material-symbols-outlined text-[16px]"
+                    style={{ fontVariationSettings: "'FILL' 1" }}
+                  >
+                    verified
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Name & Info */}
+            <div className="space-y-1 mb-8">
+              <h2 className="text-white text-[28px] font-bold leading-tight tracking-tight">
+                {checkedInData.user.name}
+              </h2>
+              <p className="text-[#92a4c9] text-sm font-medium">
+                ID: #{checkedInData.user.rollNo?.split('-').pop() || '00000'} • Class of 2025
+              </p>
+              <p className="text-xs text-[#92a4c9]/60 font-medium uppercase tracking-wider pt-2">
+                {checkedInData.user.department || 'Student'}
+              </p>
+            </div>
+
+            {/* Action Button */}
+            <button 
+              onClick={handleDone}
+              className="group relative w-full overflow-hidden rounded-xl bg-[#135bec] h-[52px] flex items-center justify-center transition-all hover:bg-blue-600 active:scale-[0.98] shadow-lg shadow-blue-900/20"
+            >
+              <span className="relative z-10 text-white text-base font-bold tracking-wide">Done</span>
+              {/* Shine effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"></div>
+            </button>
+          </div>
+
+          {/* Footer Text */}
+          <button 
+            onClick={handleScanNext}
+            className="mt-8 text-sm text-slate-500 font-medium opacity-60 hover:opacity-100 transition-opacity"
+          >
+            Tap to scan next student
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

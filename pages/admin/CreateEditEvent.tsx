@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { backend } from '../../services/mockBackend';
-import { ChevronLeft, Calendar, MapPin, Tag, Users, DollarSign, Image, Trash2, Save, X } from 'lucide-react';
 import { EventCategory } from '../../types';
 
 export default function CreateEditEvent() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(false);
+  const [coverImage, setCoverImage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -38,6 +39,9 @@ export default function CreateEditEvent() {
             totalSlots: event.totalSlots,
             category: event.category
           });
+          if (event.imageUrl) {
+            setCoverImage(event.imageUrl);
+          }
         }
         setLoading(false);
       };
@@ -49,8 +53,23 @@ export default function CreateEditEvent() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCoverImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (isDraft: boolean = false) => {
+    if (!formData.title || !formData.date || !formData.time) {
+      alert('Please fill in all required fields');
+      return;
+    }
+    
     setLoading(true);
     try {
       const eventDate = new Date(`${formData.date}T${formData.time}`).toISOString();
@@ -59,17 +78,23 @@ export default function CreateEditEvent() {
         await backend.updateEvent(id, {
           ...formData,
           eventDate,
+          status: isDraft ? 'draft' : 'published',
         });
+        navigate('/admin/dashboard');
       } else {
-        await backend.createEvent({
+        const newEvent = await backend.createEvent({
           ...formData,
           eventDate,
           adminId: 'u1',
-          status: 'published',
-          imageUrl: `https://picsum.photos/800/400?random=${Math.random()}`
+          status: isDraft ? 'draft' : 'published',
+          imageUrl: coverImage || `https://picsum.photos/800/400?random=${Math.random()}`
         });
+        if (isDraft) {
+          navigate('/admin/events');
+        } else {
+          navigate('/admin/event-published', { state: { event: newEvent } });
+        }
       }
-      navigate('/admin/events');
     } catch (e) {
       alert('Error saving event');
     } finally {
@@ -83,7 +108,7 @@ export default function CreateEditEvent() {
       setLoading(true);
       try {
         await backend.deleteEvent(id);
-        navigate('/admin/events');
+        navigate('/admin/dashboard');
       } catch (e) {
         alert('Error deleting event');
         setLoading(false);
@@ -91,181 +116,255 @@ export default function CreateEditEvent() {
     }
   };
 
+  // Format display date for the datetime input
+  const formatDisplayDateTime = () => {
+    if (!formData.date || !formData.time) return '';
+    const date = new Date(`${formData.date}T${formData.time}`);
+    return date.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true 
+    });
+  };
+
   if (loading && isEditing && !formData.title) {
-    return <div className="p-8 text-center text-gray-500">Loading event details...</div>;
+    return (
+      <div className="min-h-screen bg-[#0B1019] flex items-center justify-center">
+        <span className="material-symbols-outlined animate-spin text-[#135bec] text-[32px]">progress_activity</span>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center">
-          <button onClick={() => navigate(-1)} className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition">
-            <ChevronLeft size={24} className="text-gray-600" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{isEditing ? 'Edit Event' : 'Create New Event'}</h1>
-            <p className="text-gray-500 text-sm">{isEditing ? 'Update event details' : 'Fill in the details to create a new event'}</p>
-          </div>
-        </div>
-        {isEditing && (
+    <div className="relative flex min-h-screen w-full flex-col max-w-md mx-auto shadow-2xl overflow-hidden bg-[#0B1019] font-display text-white antialiased">
+      {/* Sticky Header */}
+      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-white/5 bg-[#0B1019]/90 px-4 backdrop-blur-md transition-colors">
+        <button 
+          onClick={() => navigate(-1)}
+          className="group flex size-10 items-center justify-center rounded-full text-slate-400 hover:bg-white/5 transition-all active:scale-95"
+        >
+          <span className="material-symbols-outlined text-xl">arrow_back_ios_new</span>
+        </button>
+        <h1 className="text-[17px] font-semibold tracking-tight text-white">
+          {isEditing ? 'Edit Event' : 'New Event'}
+        </h1>
+        {isEditing ? (
           <button 
             onClick={handleDelete}
-            className="flex items-center px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+            className="flex size-10 items-center justify-center rounded-full text-red-400 hover:bg-red-500/10 transition-all active:scale-95"
           >
-            <Trash2 size={18} className="mr-2" /> Delete Event
+            <span className="material-symbols-outlined text-xl">delete</span>
+          </button>
+        ) : (
+          <button className="flex size-10 items-center justify-center rounded-full text-slate-400 hover:bg-white/5 transition-all active:scale-95">
+            <span className="material-symbols-outlined text-xl">more_horiz</span>
           </button>
         )}
-      </div>
+      </header>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-8 space-y-6">
-          {/* Basic Info Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="lg:col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Event Title *</label>
+      {/* Main Content - Scrollable */}
+      <main className="flex-1 overflow-y-auto pb-24" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="flex flex-col gap-8 px-5 py-6">
+          
+          {/* Cover Photo Upload */}
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="group relative aspect-video w-full overflow-hidden rounded-2xl bg-[#151B28] transition-all hover:shadow-[0_0_15px_rgba(19,91,236,0.15)] cursor-pointer border border-dashed border-white/10 hover:border-[#135bec]"
+          >
+            <input 
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+              aria-label="Upload Cover Photo"
+            />
+            
+            {coverImage ? (
+              <>
+                <img 
+                  src={coverImage} 
+                  alt="Cover" 
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <div className="flex size-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                    <span className="material-symbols-outlined text-3xl text-white">edit</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 transition-opacity duration-300">
+                <div className="flex size-14 items-center justify-center rounded-full bg-[#135bec]/10 text-[#135bec] group-hover:scale-110 transition-transform">
+                  <span className="material-symbols-outlined text-3xl">add_a_photo</span>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-white">Add Cover Photo</p>
+                  <p className="mt-1 text-xs text-slate-400">High quality recommended (16:9)</p>
+                </div>
+              </div>
+            )}
+            <div className="absolute inset-0 bg-[#135bec]/5 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none"></div>
+          </div>
+
+          {/* Form Fields */}
+          <div className="flex flex-col gap-6">
+            
+            {/* Event Title */}
+            <div className="group relative">
+              <label className="mb-2 block text-sm font-medium text-slate-300" htmlFor="event-name">
+                Event Title
+              </label>
               <input 
-                required
-                className="w-full p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-                placeholder="e.g. Annual Tech Fest 2024"
+                id="event-name"
+                type="text"
                 value={formData.title}
                 onChange={e => handleChange('title', e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-[15px] font-medium text-white outline-none transition-all placeholder:text-gray-500 hover:bg-white/10 focus:border-[#135bec] focus:bg-[#151B28] focus:ring-1 focus:ring-[#135bec]"
+                placeholder="e.g. Innovation Summit 2024"
               />
             </div>
 
-            <div className="lg:col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+            {/* About the Event */}
+            <div className="group relative">
+              <label className="mb-2 block text-sm font-medium text-slate-300" htmlFor="description">
+                About the Event
+              </label>
               <textarea 
-                className="w-full p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition h-32 resize-none"
-                placeholder="Describe your event in detail..."
+                id="description"
                 value={formData.description}
                 onChange={e => handleChange('description', e.target.value)}
+                className="min-h-[140px] w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-[15px] leading-relaxed text-white outline-none transition-all placeholder:text-gray-500 hover:bg-white/10 focus:border-[#135bec] focus:bg-[#151B28] focus:ring-1 focus:ring-[#135bec]"
+                placeholder="Share the details, agenda, and what students can expect..."
               />
             </div>
-          </div>
 
-          {/* Date & Time Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Date *</label>
-              <div className="relative">
-                <Calendar className="absolute left-4 top-4 text-gray-400" size={18} />
+            {/* Date & Time */}
+            <div className="group relative">
+              <label className="mb-2 block text-sm font-medium text-slate-300">Date & Time</label>
+              <div className="relative flex items-center">
+                <span className="absolute left-4 text-gray-500 material-symbols-outlined">event</span>
                 <input 
-                  required
-                  type="date"
-                  className="w-full pl-12 p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-                  value={formData.date}
-                  onChange={e => handleChange('date', e.target.value)}
+                  type="datetime-local"
+                  value={formData.date && formData.time ? `${formData.date}T${formData.time}` : ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val) {
+                      const [date, time] = val.split('T');
+                      handleChange('date', date);
+                      handleChange('time', time);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 py-3.5 pl-12 pr-4 text-[15px] font-medium text-white outline-none transition-all placeholder:text-gray-500 hover:bg-white/10 focus:border-[#135bec] focus:bg-[#151B28] focus:ring-1 focus:ring-[#135bec] [color-scheme:dark]"
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Time *</label>
-              <input 
-                required
-                type="time"
-                className="w-full p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-                value={formData.time}
-                onChange={e => handleChange('time', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Total Slots *</label>
-              <div className="relative">
-                <Users className="absolute left-4 top-4 text-gray-400" size={18} />
-                <input 
-                  type="number"
-                  min="1"
-                  className="w-full pl-12 p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-                  placeholder="100"
-                  value={formData.totalSlots}
-                  onChange={e => handleChange('totalSlots', parseInt(e.target.value) || 0)}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Price ($)</label>
-              <div className="relative">
-                <DollarSign className="absolute left-4 top-4 text-gray-400" size={18} />
-                <input 
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="w-full pl-12 p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-                  placeholder="0 for free"
-                  value={formData.price}
-                  onChange={e => handleChange('price', parseFloat(e.target.value) || 0)}
-                />
-              </div>
-            </div>
-          </div>
 
-          {/* Venue & Category Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Venue *</label>
-              <div className="relative">
-                <MapPin className="absolute left-4 top-4 text-gray-400" size={18} />
+            {/* Venue */}
+            <div className="group relative">
+              <label className="mb-2 block text-sm font-medium text-slate-300" htmlFor="venue">
+                Venue
+              </label>
+              <div className="relative flex items-center">
+                <span className="absolute left-4 text-gray-500 material-symbols-outlined">location_on</span>
                 <input 
-                  required
-                  className="w-full pl-12 p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-                  placeholder="e.g. Main Auditorium, Building A"
+                  id="venue"
+                  type="text"
                   value={formData.venue}
                   onChange={e => handleChange('venue', e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 py-3.5 pl-12 pr-4 text-[15px] font-medium text-white outline-none transition-all placeholder:text-gray-500 hover:bg-white/10 focus:border-[#135bec] focus:bg-[#151B28] focus:ring-1 focus:ring-[#135bec]"
+                  placeholder="e.g. Main Auditorium, Building A"
                 />
               </div>
             </div>
-            
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
-              <div className="relative">
-                <Tag className="absolute left-4 top-4 text-gray-400" size={18} />
+
+            {/* Category */}
+            <div className="group relative">
+              <label className="mb-2 block text-sm font-medium text-slate-300">Category</label>
+              <div className="relative flex items-center">
+                <span className="absolute left-4 text-gray-500 material-symbols-outlined">category</span>
                 <select 
-                  className="w-full pl-12 p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none transition cursor-pointer"
                   value={formData.category}
                   onChange={e => handleChange('category', e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 py-3.5 pl-12 pr-10 text-[15px] font-medium text-white outline-none transition-all hover:bg-white/10 focus:border-[#135bec] focus:bg-[#151B28] focus:ring-1 focus:ring-[#135bec] appearance-none cursor-pointer"
                 >
-                  <option value="Cultural">Cultural</option>
-                  <option value="Technical">Technical</option>
-                  <option value="Sports">Sports</option>
-                  <option value="Workshop">Workshop</option>
-                  <option value="Seminar">Seminar</option>
-                  <option value="Other">Other</option>
+                  <option value="Cultural" className="bg-[#151B28]">Cultural</option>
+                  <option value="Technical" className="bg-[#151B28]">Technical</option>
+                  <option value="Sports" className="bg-[#151B28]">Sports</option>
+                  <option value="Workshop" className="bg-[#151B28]">Workshop</option>
+                  <option value="Seminar" className="bg-[#151B28]">Seminar</option>
+                  <option value="Other" className="bg-[#151B28]">Other</option>
                 </select>
+                <span className="absolute right-4 text-gray-400 pointer-events-none material-symbols-outlined text-lg">expand_more</span>
               </div>
             </div>
-          </div>
 
-          {/* Image Upload Placeholder */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Cover Image</label>
-            <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 flex flex-col items-center justify-center text-gray-400 hover:border-primary hover:bg-primary/5 transition cursor-pointer">
-              <Image size={48} className="mb-3 opacity-50" />
-              <span className="text-sm font-medium">Click to upload cover image</span>
-              <span className="text-xs mt-1">PNG, JPG up to 5MB</span>
+            {/* Price & Capacity Row */}
+            <div className="grid grid-cols-2 gap-5">
+              {/* Ticket Price */}
+              <div className="relative">
+                <label className="mb-2 block text-sm font-medium text-slate-300">Ticket Price</label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-4 text-gray-500 font-medium">$</span>
+                  <input 
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.price || ''}
+                    onChange={e => handleChange('price', parseFloat(e.target.value) || 0)}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 py-3.5 pl-9 pr-4 text-[15px] font-medium text-white outline-none transition-all placeholder:text-gray-500 hover:bg-white/10 focus:border-[#135bec] focus:bg-[#151B28] focus:ring-1 focus:ring-[#135bec]"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              {/* Capacity */}
+              <div className="relative">
+                <label className="mb-2 block text-sm font-medium text-slate-300">Capacity</label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-4 text-gray-500 material-symbols-outlined text-[20px]">group</span>
+                  <input 
+                    type="number"
+                    min="1"
+                    value={formData.totalSlots || ''}
+                    onChange={e => handleChange('totalSlots', parseInt(e.target.value) || 0)}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 py-3.5 pl-12 pr-4 text-[15px] font-medium text-white outline-none transition-all placeholder:text-gray-500 hover:bg-white/10 focus:border-[#135bec] focus:bg-[#151B28] focus:ring-1 focus:ring-[#135bec]"
+                    inputMode="numeric"
+                    placeholder="Unlim."
+                  />
+                </div>
+              </div>
             </div>
+
           </div>
         </div>
+      </main>
 
-        {/* Footer Actions */}
-        <div className="bg-gray-50 px-8 py-5 border-t border-gray-100 flex justify-end gap-4">
+      {/* Sticky Footer */}
+      <footer className="sticky bottom-0 z-20 w-full border-t border-white/5 bg-[#0B1019]/80 p-4 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
           <button 
-            type="button" 
-            onClick={() => navigate(-1)} 
-            className="px-6 py-3 font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition flex items-center"
+            type="button"
+            onClick={() => handleSubmit(true)}
+            disabled={loading}
+            className="flex h-12 flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-[15px] font-semibold text-slate-200 transition-colors active:bg-white/10 disabled:opacity-50"
           >
-            <X size={18} className="mr-2" /> Cancel
+            Save Draft
           </button>
           <button 
-            type="submit" 
-            disabled={loading} 
-            className="px-8 py-3 font-bold text-white bg-primary rounded-xl shadow-lg hover:bg-primaryLight transition flex items-center disabled:opacity-50"
+            type="button"
+            onClick={() => handleSubmit(false)}
+            disabled={loading}
+            className="flex h-12 flex-[2] items-center justify-center rounded-xl bg-[#135bec] text-[15px] font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-[#0e4ac4] active:scale-[0.98] active:shadow-none disabled:opacity-50"
           >
-            <Save size={18} className="mr-2" />
             {loading ? 'Saving...' : (isEditing ? 'Save Changes' : 'Publish Event')}
           </button>
         </div>
-      </form>
+      </footer>
     </div>
   );
 }

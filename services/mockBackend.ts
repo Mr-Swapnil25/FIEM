@@ -15,8 +15,79 @@ const MOCK_USERS: User[] = [
     email: 'student@college.edu',
     role: 'student',
     department: 'Computer Science',
-    rollNo: 'CS2024001',
+    rollNo: 'CS-2024-001',
     avatarUrl: 'https://picsum.photos/201',
+  },
+  {
+    id: 'u3',
+    name: 'Alex Johnson',
+    email: 'alex.johnson@college.edu',
+    role: 'student',
+    department: 'Computer Science',
+    rollNo: 'CS-2024-042',
+    avatarUrl: 'https://picsum.photos/202',
+  },
+  {
+    id: 'u4',
+    name: 'Sarah Williams',
+    email: 'sarah.williams@college.edu',
+    role: 'student',
+    department: 'Electronics',
+    rollNo: 'EC-2024-018',
+    avatarUrl: 'https://picsum.photos/203',
+  },
+  {
+    id: 'u5',
+    name: 'Michael Chen',
+    email: 'michael.chen@college.edu',
+    role: 'student',
+    department: 'Mechanical',
+    rollNo: 'ME-2024-007',
+    avatarUrl: 'https://picsum.photos/204',
+  }
+];
+
+const MOCK_BOOKINGS: Booking[] = [
+  {
+    id: 'b1',
+    userId: 'u3',
+    eventId: 'e1',
+    ticketId: 'EVT-9982-XJ',
+    qrCode: 'EVENT-EASE:e1:u3',
+    status: 'confirmed',
+    amountPaid: 0,
+    bookedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+  },
+  {
+    id: 'b2',
+    userId: 'u4',
+    eventId: 'e1',
+    ticketId: 'EVT-8823-AB',
+    qrCode: 'EVENT-EASE:e1:u4',
+    status: 'checked_in',
+    amountPaid: 0,
+    bookedAt: new Date(Date.now() - 86400000 * 5).toISOString(),
+    checkedInAt: new Date(Date.now() - 86400000 * 1).toISOString(),
+  },
+  {
+    id: 'b3',
+    userId: 'u5',
+    eventId: 'e2',
+    ticketId: 'EVT-7711-CD',
+    qrCode: 'EVENT-EASE:e2:u5',
+    status: 'confirmed',
+    amountPaid: 15.00,
+    bookedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+  {
+    id: 'b4',
+    userId: 'u3',
+    eventId: 'e2',
+    ticketId: 'EVT-6655-EF',
+    qrCode: 'EVENT-EASE:e2:u3',
+    status: 'confirmed',
+    amountPaid: 50.00,
+    bookedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
   }
 ];
 
@@ -76,7 +147,18 @@ class SimulatedBackend {
   constructor() {
     this.users = this.load('users', MOCK_USERS);
     this.events = this.load('events', MOCK_EVENTS);
-    this.bookings = this.load('bookings', []);
+    this.bookings = this.load('bookings', MOCK_BOOKINGS);
+  }
+
+  // Reset to fresh mock data
+  resetData() {
+    this.users = [...MOCK_USERS];
+    this.events = [...MOCK_EVENTS];
+    this.bookings = [...MOCK_BOOKINGS];
+    this.save('users', this.users);
+    this.save('events', this.events);
+    this.save('bookings', this.bookings);
+    localStorage.removeItem('eventease_session');
   }
 
   private load<T>(key: string, defaultData: T): T {
@@ -221,6 +303,80 @@ class SimulatedBackend {
       totalRegistrations: this.bookings.filter(b => b.status === 'confirmed' || b.status === 'checked_in').length,
       totalRevenue: this.bookings.reduce((sum, b) => sum + (b.amountPaid || 0), 0),
     };
+  }
+
+  // --- QR Scanner / Ticket Search ---
+  async findBookingByTicketId(ticketId: string): Promise<Booking | null> {
+    await this.delay(300);
+    const booking = this.bookings.find(b => b.ticketId.toLowerCase() === ticketId.toLowerCase());
+    return booking || null;
+  }
+
+  async findBookingByQRCode(qrCode: string): Promise<Booking | null> {
+    await this.delay(300);
+    // QR code format: EVENT-EASE:eventId:userId
+    const booking = this.bookings.find(b => b.qrCode === qrCode);
+    return booking || null;
+  }
+
+  // --- Participant Details ---
+  async getParticipantDetails(bookingId: string): Promise<{ booking: Booking; user: User | null; event: Event | null }> {
+    await this.delay(500);
+    const booking = this.bookings.find(b => b.id === bookingId);
+    if (!booking) throw new Error('Booking not found');
+    
+    const user = this.users.find(u => u.id === booking.userId) || null;
+    const event = this.events.find(e => e.id === booking.eventId) || null;
+    
+    return { booking, user, event };
+  }
+
+  async checkInParticipant(bookingId: string): Promise<Booking> {
+    await this.delay(800);
+    const index = this.bookings.findIndex(b => b.id === bookingId);
+    if (index === -1) throw new Error('Booking not found');
+    
+    if (this.bookings[index].status === 'cancelled') {
+      throw new Error('Cannot check in a cancelled booking');
+    }
+    
+    if (this.bookings[index].status === 'checked_in') {
+      throw new Error('Participant already checked in');
+    }
+    
+    this.bookings[index] = {
+      ...this.bookings[index],
+      status: 'checked_in',
+      checkedInAt: new Date().toISOString()
+    };
+    
+    this.save('bookings', this.bookings);
+    return this.bookings[index];
+  }
+
+  async cancelBooking(bookingId: string): Promise<Booking> {
+    await this.delay(500);
+    const index = this.bookings.findIndex(b => b.id === bookingId);
+    if (index === -1) throw new Error('Booking not found');
+    
+    if (this.bookings[index].status === 'cancelled') {
+      throw new Error('Booking already cancelled');
+    }
+    
+    // Restore available slot
+    const eventIndex = this.events.findIndex(e => e.id === this.bookings[index].eventId);
+    if (eventIndex !== -1) {
+      this.events[eventIndex].availableSlots += 1;
+      this.save('events', this.events);
+    }
+    
+    this.bookings[index] = {
+      ...this.bookings[index],
+      status: 'cancelled'
+    };
+    
+    this.save('bookings', this.bookings);
+    return this.bookings[index];
   }
 
   private delay(ms: number) {

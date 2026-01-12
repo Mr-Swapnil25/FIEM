@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EventEase Icon Generator</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+      padding: 40px;
+      text-align: center;
+    }
+    h1 { color: #4f8bff; margin-bottom: 10px; }
+    p { color: #888; margin-bottom: 30px; }
+    .preview-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+    .preview-item {
+      background: #252540;
+      padding: 15px;
+      border-radius: 12px;
+    }
+    .preview-item canvas {
+      display: block;
+      margin: 0 auto 10px;
+      border-radius: 8px;
+    }
+    .preview-item span {
+      font-size: 12px;
+      color: #888;
+    }
+    button {
+      background: linear-gradient(135deg, #135bec 0%, #0f4bc4 100%);
+      color: white;
+      border: none;
+      padding: 16px 40px;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(19, 91, 236, 0.4);
+    }
+    .instructions {
+      background: #252540;
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 30px;
+      text-align: left;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .instructions h3 { color: #4f8bff; margin-top: 0; }
+    .instructions ol { color: #ccc; line-height: 1.8; }
+    .status { 
+      margin-top: 20px; 
+      padding: 15px; 
+      background: #1e3a1e; 
+      border-radius: 8px;
+      display: none;
+    }
+    .status.show { display: block; }
+  </style>
+</head>
+<body>
+  <h1>🎨 EventEase PWA Icon Generator</h1>
+  <p>Generate PNG icons for your PWA manifest</p>
+  
+  <div class="preview-container" id="previews"></div>
+  
+  <button onclick="downloadAll()">📥 Download All Icons</button>
+  <button onclick="downloadMaskable()">📥 Download Maskable Icon</button>
+  
+  <div class="status" id="status">✅ All icons downloaded! Move them to /public/icons/</div>
+  
+  <div class="instructions">
+    <h3>📋 Instructions</h3>
+    <ol>
+      <li>Click "Download All Icons" to download all 8 standard icons</li>
+      <li>Click "Download Maskable Icon" for the maskable version</li>
+      <li>Move all downloaded PNG files to: <code>public/icons/</code></li>
+      <li>Delete the old SVG files from that folder</li>
+      <li>Run <code>npm run build</code> again</li>
+      <li>Verify icons in Chrome DevTools > Application > Manifest</li>
+    </ol>
+  </div>
+
+  <script>
+    const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+    
+    // Draw calendar icon on canvas
+    function drawIcon(canvas, size, isMaskable = false) {
+      const ctx = canvas.getContext('2d');
+      canvas.width = size;
+      canvas.height = size;
+      
+      // Calculate proportions
+      const scale = size / 512;
+      const padding = isMaskable ? size * 0.1 : 0; // Safe zone for maskable
+      const iconSize = size - (padding * 2);
+      const cornerRadius = isMaskable ? 0 : size * 0.15;
+      
+      // Draw gradient background
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#135bec');
+      gradient.addColorStop(1, '#0f4bc4');
+      
+      if (isMaskable) {
+        // Full square for maskable (OS applies mask)
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+      } else {
+        // Rounded rectangle for standard icons
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.roundRect(0, 0, size, size, cornerRadius);
+        ctx.fill();
+      }
+      
+      // Draw calendar icon
+      ctx.save();
+      if (isMaskable) {
+        ctx.translate(padding, padding);
+        ctx.scale(iconSize / size, iconSize / size);
+      }
+      
+      const s = scale;
+      ctx.strokeStyle = 'white';
+      ctx.fillStyle = 'white';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      // Calendar body dimensions
+      const bodyX = 96 * s;
+      const bodyY = 138 * s;
+      const bodyW = 320 * s;
+      const bodyH = 246 * s;
+      const bodyRadius = 20 * s;
+      const lineWidth = 16 * s;
+      
+      ctx.lineWidth = lineWidth;
+      
+      // Calendar body (rounded rect outline)
+      ctx.beginPath();
+      ctx.roundRect(bodyX, bodyY, bodyW, bodyH, bodyRadius);
+      ctx.stroke();
+      
+      // Header line
+      const headerY = bodyY + 70 * s;
+      ctx.beginPath();
+      ctx.moveTo(bodyX, headerY);
+      ctx.lineTo(bodyX + bodyW, headerY);
+      ctx.stroke();
+      
+      // Calendar hooks (top handles)
+      const hookY1 = 96 * s;
+      const hookY2 = 170 * s;
+      const hook1X = 170 * s;
+      const hook2X = 342 * s;
+      
+      ctx.beginPath();
+      ctx.moveTo(hook1X, hookY1);
+      ctx.lineTo(hook1X, hookY2);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(hook2X, hookY1);
+      ctx.lineTo(hook2X, hookY2);
+      ctx.stroke();
+      
+      // Calendar date dots (3x2 grid)
+      const dotSize = 48 * s;
+      const dotRadius = 8 * s;
+      const dotStartX = 144 * s;
+      const dotStartY = 244 * s;
+      const dotGapX = 88 * s;
+      const dotGapY = 76 * s;
+      
+      // Row 1
+      ctx.beginPath();
+      ctx.roundRect(dotStartX, dotStartY, dotSize, dotSize, dotRadius);
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.roundRect(dotStartX + dotGapX, dotStartY, dotSize, dotSize, dotRadius);
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.roundRect(dotStartX + dotGapX * 2, dotStartY, dotSize, dotSize, dotRadius);
+      ctx.fill();
+      
+      // Row 2 (only 2 dots)
+      ctx.beginPath();
+      ctx.roundRect(dotStartX, dotStartY + dotGapY, dotSize, dotSize, dotRadius);
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.roundRect(dotStartX + dotGapX, dotStartY + dotGapY, dotSize, dotSize, dotRadius);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+    
+    // Create preview canvases
+    function createPreviews() {
+      const container = document.getElementById('previews');
+      
+      sizes.forEach(size => {
+        const div = document.createElement('div');
+        div.className = 'preview-item';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = `icon-${size}`;
+        drawIcon(canvas, size, false);
+        
+        // Scale down for display
+        const displaySize = Math.min(size, 128);
+        canvas.style.width = displaySize + 'px';
+        canvas.style.height = displaySize + 'px';
+        
+        const span = document.createElement('span');
+        span.textContent = `${size}x${size}`;
+        
+        div.appendChild(canvas);
+        div.appendChild(span);
+        container.appendChild(div);
+      });
+      
+      // Maskable preview
+      const div = document.createElement('div');
+      div.className = 'preview-item';
+      
+      const canvas = document.createElement('canvas');
+      canvas.id = 'icon-maskable';
+      drawIcon(canvas, 512, true);
+      canvas.style.width = '128px';
+      canvas.style.height = '128px';
+      
+      const span = document.createElement('span');
+      span.textContent = '512x512 (maskable)';
+      
+      div.appendChild(canvas);
+      div.appendChild(span);
+      container.appendChild(div);
+    }
+    
+    // Download single icon
+    function downloadIcon(canvas, filename) {
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+    
+    // Download all standard icons
+    function downloadAll() {
+      sizes.forEach((size, index) => {
+        setTimeout(() => {
+          const canvas = document.getElementById(`icon-${size}`);
+          downloadIcon(canvas, `icon-${size}x${size}.png`);
+          
+          if (index === sizes.length - 1) {
+            document.getElementById('status').classList.add('show');
+          }
+        }, index * 300); // Stagger downloads
+      });
+    }
+    
+    // Download maskable icon
+    function downloadMaskable() {
+      const canvas = document.getElementById('icon-maskable');
+      downloadIcon(canvas, 'icon-maskable-512x512.png');
+    }
+    
+    // Initialize
+    createPreviews();
+  </script>
+</body>
+</html>
