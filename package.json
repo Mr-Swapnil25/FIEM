@@ -15,6 +15,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.16",
     "firebase": "^12.7.0",
     "jspdf": "^4.0.0",
     "jspdf-autotable": "^5.0.7",

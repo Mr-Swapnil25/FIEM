@@ -159,7 +159,7 @@ interface ReviewCardProps {
   review: Review;
 }
 
-function ReviewCard({ review }: ReviewCardProps) {
+const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();

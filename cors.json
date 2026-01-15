@@ -1,0 +1,25 @@
+[
+  {
+    "origin": [
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://future-project-148.web.app",
+      "https://future-project-148.firebaseapp.com",
+      "https://*.teamfuture.in"
+    ],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE", "OPTIONS"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Content-Disposition",
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers",
+      "Access-Control-Max-Age",
+      "X-Requested-With",
+      "Authorization"
+    ]
+  }
+]

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { getParticipantDetails, checkInParticipant, cancelBooking } from '../../services/backend';
+import { getParticipantDetails } from '../../services/backend';
 import { Booking, Event, User } from '../../types';
 import { useAuth } from '../../App';
+import { useCheckInParticipant, useCancelBooking } from '../../hooks';
 
 interface ParticipantData {
   booking: Booking;
@@ -17,8 +18,11 @@ export default function ParticipantDetails() {
   const { user: currentUser } = useAuth();
   const [data, setData] = useState<ParticipantData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [checkingIn, setCheckingIn] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
+
+  // React Query mutations
+  const checkInMutation = useCheckInParticipant();
+  const cancelBookingMutation = useCancelBooking();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -39,15 +43,16 @@ export default function ParticipantDetails() {
   const handleCheckIn = async () => {
     if (!data || !bookingId || !currentUser?.id) return;
     try {
-      setCheckingIn(true);
-      await checkInParticipant(bookingId, currentUser.id, 'manual');
+      await checkInMutation.mutateAsync({
+        bookingId,
+        checkedInBy: currentUser.id,
+        method: 'manual_entry'
+      });
       // Refresh data after check-in
       const updatedData = await getParticipantDetails(bookingId);
       setData(updatedData);
     } catch (error) {
       alert((error as Error).message);
-    } finally {
-      setCheckingIn(false);
     }
   };
 
@@ -61,7 +66,10 @@ export default function ParticipantDetails() {
     if (!data || !bookingId || !data.event?.id) return;
     if (!confirm('Are you sure you want to cancel this booking?')) return;
     try {
-      await cancelBooking(bookingId, data.event.id);
+      await cancelBookingMutation.mutateAsync({
+        bookingId,
+        eventId: data.event.id
+      });
       navigate(-1);
     } catch (error) {
       alert((error as Error).message);
@@ -356,10 +364,10 @@ export default function ParticipantDetails() {
               {booking.status === 'confirmed' && (
                 <button 
                   onClick={handleCheckIn}
-                  disabled={checkingIn}
+                  disabled={checkInMutation.isPending}
                   className="group relative flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 bg-indigo-500 hover:bg-indigo-600 text-white gap-3 px-6 shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  {checkingIn ? (
+                  {checkInMutation.isPending ? (
                     <>
                       <span className="material-symbols-outlined animate-spin text-[24px]">progress_activity</span>
                       <span className="text-lg font-bold tracking-wide">Checking in...</span>

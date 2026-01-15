@@ -16,10 +16,17 @@ import {
   FirebaseUser,
   isValidInstitutionalEmail,
   parseInstitutionalEmail,
-  COLLECTIONS
+  COLLECTIONS,
+  GoogleAuthProvider,
+  signInWithPopup
 } from './firebase';
 import { 
+  getAuth,
+  OAuthProvider
+} from 'firebase/auth';
+import { 
   getUserById as dcGetUserById, 
+  getUserByEmail as dcGetUserByEmail,
   createUser as dcCreateUser,
   updateUser as dcUpdateUser
 } from './dataConnectService';
@@ -45,6 +52,33 @@ export interface RegistrationData {
   avatar?: string;
 }
 
+// Type guard for Firebase Auth errors
+interface FirebaseAuthError {
+  code: string;
+  message: string;
+}
+
+function isFirebaseAuthError(error: unknown): error is FirebaseAuthError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    'message' in error &&
+    typeof (error as FirebaseAuthError).code === 'string' &&
+    typeof (error as FirebaseAuthError).message === 'string'
+  );
+}
+
+function getErrorMessage(error: unknown, defaultMessage: string): string {
+  if (isFirebaseAuthError(error)) {
+    return error.message || defaultMessage;
+  }
+  if (error instanceof Error) {
+    return error.message || defaultMessage;
+  }
+  return defaultMessage;
+}
+
 // ==================== AUTH STATE ====================
 
 /**
@@ -55,11 +89,13 @@ export const onAuthStateChanged = (callback: (user: User | null) => void): (() =
   return firebaseOnAuthStateChanged(auth, async (firebaseUser) => {
     if (firebaseUser) {
       try {
-        // Get user profile from Cloud SQL via Data Connect
-        const userProfile = await dcGetUserById(firebaseUser.uid);
+        // Get user profile from Cloud SQL via Data Connect using email
+        // (Schema uses auto-generated UUIDs, not Firebase UIDs)
+        const userProfile = await dcGetUserByEmail(firebaseUser.email || '');
         
         if (userProfile) {
-          callback(userProfile);
+          // Return user profile with Firebase UID as the id for app consistency
+          callback({ ...userProfile, id: firebaseUser.uid });
         } else {
           // User exists in Auth but not in database - create profile
           const emailParts = parseInstitutionalEmail(firebaseUser.email || '');
@@ -100,10 +136,15 @@ export const getCurrentUser = (): FirebaseUser | null => {
  */
 export const getCurrentUserProfile = async (): Promise<User | null> => {
   const firebaseUser = auth.currentUser;
-  if (!firebaseUser) return null;
+  if (!firebaseUser || !firebaseUser.email) return null;
   
   try {
-    return await dcGetUserById(firebaseUser.uid);
+    const profile = await dcGetUserByEmail(firebaseUser.email);
+    if (profile) {
+      // Return with Firebase UID for app consistency
+      return { ...profile, id: firebaseUser.uid };
+    }
+    return null;
   } catch (error) {
     console.error('[Auth] Error getting current user profile:', error);
     return null;
@@ -155,27 +196,29 @@ export const signUp = async (data: RegistrationData): Promise<AuthResult> => {
         ...userData
       }
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Auth] Sign up error:', error);
     
     // Handle Firebase Auth errors
     let errorMessage = 'Failed to create account';
     
-    switch (error.code) {
-      case 'auth/email-already-in-use':
-        errorMessage = 'This email is already registered';
-        break;
-      case 'auth/invalid-email':
-        errorMessage = 'Invalid email address';
-        break;
-      case 'auth/weak-password':
-        errorMessage = 'Password should be at least 6 characters';
-        break;
-      case 'auth/operation-not-allowed':
-        errorMessage = 'Email/password accounts are not enabled';
-        break;
-      default:
-        errorMessage = error.message || 'Failed to create account';
+    if (isFirebaseAuthError(error)) {
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'This email is already registered';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'Password should be at least 6 characters';
+          break;
+        case 'auth/operation-not-allowed':
+          errorMessage = 'Email/password accounts are not enabled';
+          break;
+        default:
+          errorMessage = error.message || 'Failed to create account';
+      }
     }
     
     return { success: false, error: errorMessage };
@@ -229,8 +272,8 @@ export const signIn = async (email: string, password: string): Promise<AuthResul
     const credential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
     const firebaseUser = credential.user;
     
-    // Get user profile from Cloud SQL
-    let userProfile = await dcGetUserById(firebaseUser.uid);
+    // Get user profile from Cloud SQL using email (schema uses auto-generated UUIDs)
+    let userProfile = await dcGetUserByEmail(normalizedEmail);
     
     if (!userProfile) {
       // Create profile if doesn't exist
@@ -249,36 +292,39 @@ export const signIn = async (email: string, password: string): Promise<AuthResul
       userProfile = await dcCreateUser(firebaseUser.uid, newUserData);
     }
     
+    // Return user profile with Firebase UID as the id for app consistency
     return {
       success: true,
-      user: userProfile
+      user: { ...userProfile, id: firebaseUser.uid }
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Auth] Sign in error:', error);
     
     let errorMessage = 'Failed to sign in';
     
-    switch (error.code) {
-      case 'auth/user-not-found':
-        errorMessage = 'No account found with this email';
-        break;
-      case 'auth/wrong-password':
-        errorMessage = 'Incorrect password';
-        break;
-      case 'auth/invalid-email':
-        errorMessage = 'Invalid email address';
-        break;
-      case 'auth/user-disabled':
-        errorMessage = 'This account has been disabled';
-        break;
-      case 'auth/too-many-requests':
-        errorMessage = 'Too many attempts. Please try again later';
-        break;
-      case 'auth/invalid-credential':
-        errorMessage = 'Invalid email or password';
-        break;
-      default:
-        errorMessage = error.message || 'Failed to sign in';
+    if (isFirebaseAuthError(error)) {
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Incorrect password';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This account has been disabled';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many attempts. Please try again later';
+          break;
+        case 'auth/invalid-credential':
+          errorMessage = 'Invalid email or password';
+          break;
+        default:
+          errorMessage = error.message || 'Failed to sign in';
+      }
     }
     
     // SECURITY: Track failed login attempts
@@ -292,6 +338,171 @@ export const signIn = async (email: string, password: string): Promise<AuthResul
   }
 };
 
+// ==================== GOOGLE SIGN IN ====================
+
+/**
+ * Sign in with Google
+ * Validates that the Google account uses institutional email
+ */
+export const signInWithGoogle = async (): Promise<AuthResult> => {
+  try {
+    const provider = new GoogleAuthProvider();
+    // Request email scope
+    provider.addScope('email');
+    provider.addScope('profile');
+    
+    // Force account selection
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+    
+    const result = await signInWithPopup(auth, provider);
+    const firebaseUser = result.user;
+    
+    // Validate institutional email
+    const email = firebaseUser.email?.toLowerCase() || '';
+    const allowedDomain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN || '@teamfuture.in';
+    
+    if (!email.endsWith(allowedDomain)) {
+      // Sign out if not institutional email
+      await firebaseSignOut(auth);
+      return {
+        success: false,
+        error: `Please use your institutional Google account (${allowedDomain})`
+      };
+    }
+    
+    // Check if user exists in database
+    let userProfile = await dcGetUserByEmail(email);
+    
+    if (!userProfile) {
+      // Create user profile
+      const emailParts = parseInstitutionalEmail(email);
+      const defaultName = firebaseUser.displayName || 
+        (emailParts ? `${emailParts.firstName} ${emailParts.lastName}` : 'User');
+      
+      const newUserData: Omit<User, 'id'> = {
+        email,
+        name: defaultName,
+        role: 'student',
+        avatarUrl: firebaseUser.photoURL || undefined,
+        department: emailParts?.department
+      };
+      
+      userProfile = await dcCreateUser(firebaseUser.uid, newUserData);
+    }
+    
+    return {
+      success: true,
+      user: { ...userProfile, id: firebaseUser.uid }
+    };
+  } catch (error: unknown) {
+    console.error('[Auth] Google sign in error:', error);
+    
+    let errorMessage = 'Failed to sign in with Google';
+    
+    if (isFirebaseAuthError(error)) {
+      switch (error.code) {
+        case 'auth/popup-closed-by-user':
+          errorMessage = 'Sign in cancelled';
+          break;
+        case 'auth/popup-blocked':
+          errorMessage = 'Popup was blocked. Please allow popups for this site.';
+          break;
+        case 'auth/account-exists-with-different-credential':
+          errorMessage = 'An account already exists with this email';
+          break;
+        default:
+          errorMessage = error.message || 'Failed to sign in with Google';
+      }
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+};
+
+// ==================== APPLE SIGN IN ====================
+
+/**
+ * Sign in with Apple
+ * Validates that the Apple account uses institutional email
+ */
+export const signInWithApple = async (): Promise<AuthResult> => {
+  try {
+    const provider = new OAuthProvider('apple.com');
+    provider.addScope('email');
+    provider.addScope('name');
+    
+    const result = await signInWithPopup(auth, provider);
+    const firebaseUser = result.user;
+    
+    // Apple may hide the real email, check what we got
+    const email = firebaseUser.email?.toLowerCase() || '';
+    const allowedDomain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN || '@teamfuture.in';
+    
+    // For Apple, the email might be a private relay email
+    // We should check if it's a valid institutional email
+    if (email && !email.endsWith(allowedDomain) && !email.includes('privaterelay.appleid.com')) {
+      await firebaseSignOut(auth);
+      return {
+        success: false,
+        error: `Please use your institutional Apple ID (${allowedDomain})`
+      };
+    }
+    
+    // If it's a private relay email, we'll allow it but note the limitation
+    const isPrivateRelay = email.includes('privaterelay.appleid.com');
+    
+    // Check if user exists
+    let userProfile = await dcGetUserByEmail(email);
+    
+    if (!userProfile) {
+      // Create user profile
+      const defaultName = firebaseUser.displayName || 'Apple User';
+      
+      const newUserData: Omit<User, 'id'> = {
+        email,
+        name: defaultName,
+        role: 'student',
+        avatarUrl: firebaseUser.photoURL || undefined
+      };
+      
+      userProfile = await dcCreateUser(firebaseUser.uid, newUserData);
+    }
+    
+    // Add warning if using private relay
+    if (isPrivateRelay) {
+      console.warn('[Auth] User signed in with Apple private relay email');
+    }
+    
+    return {
+      success: true,
+      user: { ...userProfile, id: firebaseUser.uid }
+    };
+  } catch (error: unknown) {
+    console.error('[Auth] Apple sign in error:', error);
+    
+    let errorMessage = 'Failed to sign in with Apple';
+    
+    if (isFirebaseAuthError(error)) {
+      switch (error.code) {
+        case 'auth/popup-closed-by-user':
+          errorMessage = 'Sign in cancelled';
+          break;
+        case 'auth/popup-blocked':
+          errorMessage = 'Popup was blocked. Please allow popups for this site.';
+          break;
+        case 'auth/account-exists-with-different-credential':
+          errorMessage = 'An account already exists with this email';
+          break;
+        default:
+          errorMessage = error.message || 'Failed to sign in with Apple';
+      }
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+};
 // ==================== SIGN OUT ====================
 
 /**
@@ -315,20 +526,22 @@ export const sendPasswordResetEmail = async (email: string): Promise<AuthResult>
   try {
     await firebaseSendPasswordResetEmail(auth, email);
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Auth] Password reset error:', error);
     
     let errorMessage = 'Failed to send reset email';
     
-    switch (error.code) {
-      case 'auth/user-not-found':
-        errorMessage = 'No account found with this email';
-        break;
-      case 'auth/invalid-email':
-        errorMessage = 'Invalid email address';
-        break;
-      default:
-        errorMessage = error.message || 'Failed to send reset email';
+    if (isFirebaseAuthError(error)) {
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        default:
+          errorMessage = error.message || 'Failed to send reset email';
+      }
     }
     
     return { success: false, error: errorMessage };
@@ -360,9 +573,9 @@ export const updateUserProfile = async (data: Partial<User>): Promise<AuthResult
     const updatedProfile = await dcGetUserById(firebaseUser.uid);
     
     return { success: true, user: updatedProfile || undefined };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Auth] Update profile error:', error);
-    return { success: false, error: error.message || 'Failed to update profile' };
+    return { success: false, error: getErrorMessage(error, 'Failed to update profile') };
   }
 };
 

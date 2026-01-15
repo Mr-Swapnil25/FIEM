@@ -136,7 +136,7 @@ export function RatingBadge({
 
 // Rating distribution bar for reviews section
 interface RatingDistributionProps {
-  distribution: { [key: number]: number };
+  distribution: Record<number, number>;
   totalReviews: number;
   className?: string;
 }

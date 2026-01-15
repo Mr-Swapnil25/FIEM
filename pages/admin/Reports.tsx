@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { getEvents, getEventParticipants, getAdminStats, subscribeToEvents } from '../../services/backend';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Event, Booking } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { exportReport, ExportFormat } from '../../services/exportReports';
+import { usePublishedEvents, useEventParticipants } from '../../hooks';
+import { useRealtimeEvents, useRealtimeEventParticipants } from '../../hooks/useRealtime';
 
 export default function Reports() {
-  const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
-  const [participants, setParticipants] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showEventSelector, setShowEventSelector] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -16,6 +14,14 @@ export default function Reports() {
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // React Query hooks
+  const { data: events = [] } = usePublishedEvents();
+  const { data: participants = [], isLoading: loading } = useEventParticipants(selectedEventId);
+  
+  // Real-time updates
+  useRealtimeEvents({ enabled: true });
+  useRealtimeEventParticipants(selectedEventId);
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -28,47 +34,25 @@ export default function Reports() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Set default selected event when events load
   useEffect(() => {
-    getEvents().then(data => {
-      setEvents(data);
-      if(data.length > 0) setSelectedEventId(data[0].id);
-    }).catch(error => {
-      console.error('Error fetching events:', error);
-    });
-    
-    // Subscribe to real-time updates
-    const unsubscribe = subscribeToEvents((updatedEvents) => {
-      setEvents(updatedEvents);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if(selectedEventId) {
-      setLoading(true);
-      getEventParticipants(selectedEventId).then(data => {
-        setParticipants(data);
-        setLoading(false);
-      }).catch(error => {
-        console.error('Error fetching participants:', error);
-        setLoading(false);
-      });
+    if (events.length > 0 && !selectedEventId) {
+      setSelectedEventId(events[0].id);
     }
-  }, [selectedEventId]);
+  }, [events, selectedEventId]);
 
   const selectedEvent = events.find(e => e.id === selectedEventId);
   
-  const filteredParticipants = participants.filter(p => 
+  const filteredParticipants = useMemo(() => participants.filter(p => 
     p.userName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.userEmail?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ), [participants, searchTerm]);
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: participants.length,
     confirmed: participants.filter(p => p.status === 'confirmed').length,
     checkedIn: participants.filter(p => p.status === 'checked_in').length,
-  };
+  }), [participants]);
 
   const handleExport = async (format: ExportFormat) => {
     if (!selectedEvent) return;
@@ -80,7 +64,7 @@ export default function Reports() {
       // Small delay to show loading state
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      exportReport(format, {
+      await exportReport(format, {
         participants: filteredParticipants,
         event: selectedEvent,
         stats,

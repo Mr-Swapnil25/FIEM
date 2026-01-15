@@ -1,45 +1,27 @@
-import React, { useEffect, useState } from 'react';
-import { getUserBookings, subscribeToUserBookings, cancelBooking, getEventById } from '../../services/backend';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../../App';
-import { Booking } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useUserBookings, useCancelBooking } from '../../hooks';
+import { useRealtimeUserBookings } from '../../hooks/useRealtime';
 
 export default function MyEvents() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('all');
 
-  useEffect(() => {
-    const fetch = async () => {
-      if(user) {
-        try {
-          const data = await getUserBookings(user.id);
-          setBookings(data);
-        } catch (error) {
-          console.error('Error fetching bookings:', error);
-        }
-        setLoading(false);
-      }
-    };
-    fetch();
-    
-    // Subscribe to real-time updates for bookings
-    if (user) {
-      const unsubscribe = subscribeToUserBookings(user.id, (updatedBookings) => {
-        setBookings(updatedBookings);
-      });
-      return () => unsubscribe();
-    }
-  }, [user]);
+  // React Query hooks - replaces manual useState/useEffect
+  const { data: bookings = [], isLoading: loading, refetch } = useUserBookings(user?.id);
+  const cancelBookingMutation = useCancelBooking();
+  
+  // Enable real-time updates via Firestore
+  const { isConnected } = useRealtimeUserBookings(user?.id, { enabled: !!user });
 
-  const filteredBookings = bookings.filter(booking => {
+  const filteredBookings = useMemo(() => bookings.filter(booking => {
     if (filter === 'all') return true;
     const isPast = new Date(booking.eventDate!) < new Date();
     return filter === 'upcoming' ? !isPast : isPast;
-  });
+  }), [bookings, filter]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

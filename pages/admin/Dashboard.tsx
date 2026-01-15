@@ -1,48 +1,40 @@
-import React, { useEffect, useState } from 'react';
-import { getAdminStats, getEvents, subscribeToEvents, deleteEvent } from '../../services/backend';
+import React, { useState, useMemo } from 'react';
 import { Event, EventStatus } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { usePublishedEvents, useDeleteEvent, useDashboardStats } from '../../hooks';
+import { useRealtimeEvents } from '../../hooks/useRealtime';
+import { useAuth } from '../../App';
+import { LiveIndicator } from '../../components/LiveIndicator';
 
 export default function AdminDashboard() {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'drafts'>('upcoming');
   const [showSearch, setShowSearch] = useState(false);
   const [search, setSearch] = useState('');
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    const fetchEvents = async () => {
-      setLoading(true);
-      try {
-        const allEvents = await getEvents();
-        setEvents(allEvents);
-      } catch (error) {
-        console.error('Error fetching events:', error);
-      }
-      setLoading(false);
-    };
-    
-    fetchEvents();
-    
-    // Subscribe to real-time updates
-    const unsubscribe = subscribeToEvents((updatedEvents) => {
-      setEvents(updatedEvents);
-    });
-
-    return () => unsubscribe();
-  }, []);
+  
+  // React Query hooks
+  const { data: events = [], isLoading: loading, refetch } = usePublishedEvents();
+  const { data: stats } = useDashboardStats(user?.id);
+  const deleteEventMutation = useDeleteEvent();
+  
+  // Enable real-time updates
+  const { isConnected } = useRealtimeEvents({ enabled: true });
 
   const handleDelete = async (eventId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this event?')) {
-      await deleteEvent(eventId);
-      setEvents(events.filter(ev => ev.id !== eventId));
+      try {
+        await deleteEventMutation.mutateAsync(eventId);
+      } catch (error) {
+        console.error('Error deleting event:', error);
+        alert('Failed to delete event. Please try again.');
+      }
     }
   };
 
-  const filteredEvents = events.filter(event => {
+  const filteredEvents = useMemo(() => events.filter(event => {
     const matchesSearch = event.title.toLowerCase().includes(search.toLowerCase());
     const eventDate = new Date(event.eventDate);
     const now = new Date();
@@ -54,7 +46,7 @@ export default function AdminDashboard() {
     } else {
       return matchesSearch && event.status === 'draft';
     }
-  });
+  }), [events, search, filter]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

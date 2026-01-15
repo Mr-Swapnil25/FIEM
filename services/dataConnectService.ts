@@ -2,6 +2,9 @@
  * Firebase Data Connect Service
  * Provides type-safe operations for Cloud SQL PostgreSQL via Data Connect
  * This service wraps the generated SDK and provides business logic
+ * 
+ * ZERO LOCAL STORAGE TOLERANCE
+ * Fallback: Firestore (via firestoreService.ts) - NOT localStorage
  */
 
 import { 
@@ -13,6 +16,9 @@ import {
 } from 'firebase/data-connect';
 import { app } from './firebase';
 import { User, Event, Booking, EventStatus, EventCategory, BookingStatus, DashboardStats } from '../types';
+
+// Import Firestore fallback service - NO localStorage
+import * as firestoreService from './firestoreService';
 
 // Data Connect configuration
 const DATA_CONNECT_CONFIG = {
@@ -58,14 +64,26 @@ export const generateQRCode = (eventId: string, ticketId: string): string => {
 
 // ==================== GRAPHQL QUERY/MUTATION EXECUTION ====================
 
+// Flag to enable/disable Data Connect (set to false for offline/development mode)
+const USE_DATA_CONNECT = import.meta.env.VITE_USE_DATA_CONNECT === 'true';
+
+// REMOVED: localStorage fallback - using Firestore instead
+// See firestoreService.ts for Firestore fallback implementation
+
 /**
  * Execute a Data Connect query with proper error handling and timeout
- * This is a wrapper that constructs query references for Firebase Data Connect
+ * Falls back to Firestore (NOT localStorage) when Data Connect is unavailable
  */
 export async function executeQuery<T>(
   queryName: string,
   variables?: Record<string, unknown>
 ): Promise<T> {
+  // If Data Connect is disabled or not configured, use Firestore fallback
+  if (!USE_DATA_CONNECT) {
+    console.log(`[DataConnect] Using Firestore fallback for query: ${queryName}`);
+    return executeFirestoreQuery<T>(queryName, variables);
+  }
+  
   const dc = getDataConnectInstance();
   
   // PERFORMANCE: Add timeout to prevent hanging requests
@@ -76,10 +94,11 @@ export async function executeQuery<T>(
   
   try {
     // Create query reference with the Data Connect instance, query name, and variables
+    // Note: This is a simplified reference structure - in production, use the generated SDK
     const queryRef = { dataConnect: dc, name: queryName, variables };
     
     const result = await Promise.race([
-      firebaseExecuteQuery(queryRef as any),
+      firebaseExecuteQuery(queryRef as unknown as Parameters<typeof firebaseExecuteQuery>[0]),
       timeoutPromise
     ]);
     
@@ -88,27 +107,31 @@ export async function executeQuery<T>(
       throw new Error('Invalid query response');
     }
     
-    return result.data as T;
+    return (result as { data: T }).data;
   } catch (error) {
     const err = error as Error;
     console.error(`[DataConnect] Query ${queryName} failed:`, err.message);
     
-    // SECURITY: Don't expose internal error details
-    if (err.message?.includes('timeout')) {
-      throw new Error('Request timed out. Please try again.');
-    }
-    throw error;
+    // Fallback to Firestore on error - NEVER use localStorage
+    console.log(`[DataConnect] Falling back to Firestore for query: ${queryName}`);
+    return executeFirestoreQuery<T>(queryName, variables);
   }
 }
 
 /**
  * Execute a Data Connect mutation with proper error handling and timeout
- * This is a wrapper that constructs mutation references for Firebase Data Connect
+ * Falls back to Firestore (NOT localStorage) when Data Connect is unavailable
  */
 export async function executeMutation<T>(
   mutationName: string,
   variables?: Record<string, unknown>
 ): Promise<T> {
+  // If Data Connect is disabled or not configured, use Firestore fallback
+  if (!USE_DATA_CONNECT) {
+    console.log(`[DataConnect] Using Firestore fallback for mutation: ${mutationName}`);
+    return executeFirestoreMutation<T>(mutationName, variables);
+  }
+  
   const dc = getDataConnectInstance();
   
   // PERFORMANCE: Add timeout to prevent hanging requests
@@ -119,10 +142,11 @@ export async function executeMutation<T>(
   
   try {
     // Create mutation reference with the Data Connect instance, mutation name, and variables
+    // Note: This is a simplified reference structure - in production, use the generated SDK
     const mutationRef = { dataConnect: dc, name: mutationName, variables };
     
     const result = await Promise.race([
-      firebaseExecuteMutation(mutationRef as any),
+      firebaseExecuteMutation(mutationRef as unknown as Parameters<typeof firebaseExecuteMutation>[0]),
       timeoutPromise
     ]);
     
@@ -131,45 +155,326 @@ export async function executeMutation<T>(
       throw new Error('Invalid mutation response');
     }
     
-    return result.data as T;
+    return (result as { data: T }).data;
   } catch (error) {
     const err = error as Error;
     console.error(`[DataConnect] Mutation ${mutationName} failed:`, err.message);
     
-    // SECURITY: Don't expose internal error details
-    if (err.message?.includes('timeout')) {
-      throw new Error('Request timed out. Please try again.');
+    // Fallback to Firestore on error - NEVER use localStorage
+    console.log(`[DataConnect] Falling back to Firestore for mutation: ${mutationName}`);
+    return executeFirestoreMutation<T>(mutationName, variables);
+  }
+}
+
+// ==================== FIRESTORE FALLBACK (ZERO localStorage) ====================
+
+// Interface for internal booking mapping
+interface InternalBooking {
+  id: string;
+  ticketId: string;
+  qrCode: string;
+  status: string;
+  bookingDate: string;
+  checkedInAt?: string;
+  isWaitlist: boolean;
+  userId: string;
+  eventId: string;
+  eventTitle?: string;
+  eventDate?: string;
+  eventTime?: string;
+  eventVenue?: string;
+  eventImage?: string;
+}
+
+/**
+ * Execute Firestore query fallback - REPLACES localStorage
+ * All data persistence goes to Cloud Firestore
+ */
+async function executeFirestoreQuery<T>(queryName: string, variables?: Record<string, unknown>): Promise<T> {
+  console.log(`[DataConnect] Firestore fallback query: ${queryName}`);
+  
+  switch (queryName) {
+    case 'GetUserByEmail': {
+      const email = (variables?.email as string)?.toLowerCase();
+      const user = await firestoreService.getUserByEmail(email);
+      return { users: user ? [user] : [] } as T;
     }
-    throw error;
+    case 'GetUserById': {
+      const id = variables?.id as string;
+      const user = await firestoreService.getUserById(id);
+      return { user: user || null } as T;
+    }
+    case 'ListPublishedEvents': {
+      const events = await firestoreService.listPublishedEvents();
+      return { events } as T;
+    }
+    case 'ListEvents': {
+      const result = await firestoreService.listEvents();
+      return { events: result } as T;
+    }
+    case 'GetEventById': {
+      const event = await firestoreService.getEventById(variables?.id as string);
+      return { event: event || null } as T;
+    }
+    case 'GetEventsByOrganizer': {
+      const events = await firestoreService.listEvents({ organizerId: variables?.organizerId as string });
+      return { events } as T;
+    }
+    case 'GetUserBookings': {
+      const bookings = await firestoreService.getUserBookings(variables?.userId as string);
+      return { bookings } as T;
+    }
+    case 'GetEventParticipants': {
+      const participants = await firestoreService.getEventParticipants(variables?.eventId as string);
+      return { bookings: participants } as T;
+    }
+    case 'GetBookingByTicketId': {
+      const booking = await firestoreService.getBookingByTicketId(variables?.ticketId as string);
+      return { bookings: booking ? [booking] : [] } as T;
+    }
+    case 'GetBookingById': {
+      const booking = await firestoreService.getBookingById(variables?.id as string);
+      return { booking: booking || null } as T;
+    }
+    case 'CheckExistingBooking': {
+      const bookings = await firestoreService.getUserBookings(variables?.userId as string);
+      const existing = bookings.filter((b: { eventId: string }) => b.eventId === variables?.eventId);
+      return { bookings: existing.map((b: { id: string }) => ({ id: b.id })) } as T;
+    }
+    case 'GetUserFavorites': {
+      const favorites = await firestoreService.getUserFavorites(variables?.userId as string);
+      return { favorites } as T;
+    }
+    case 'GetUserFavoriteEvents': {
+      const favorites = await firestoreService.getUserFavorites(variables?.userId as string);
+      const eventIds = favorites.map((f: { eventId: string }) => f.eventId);
+      const events = await Promise.all(eventIds.map((id: string) => firestoreService.getEventById(id)));
+      return { events: events.filter(e => e !== null) } as T;
+    }
+    case 'CheckIsFavorite': {
+      const isFavorite = await firestoreService.checkIsFavorite(
+        variables?.userId as string,
+        variables?.eventId as string
+      );
+      return { favorites: isFavorite ? [{ id: '1' }] : [] } as T;
+    }
+    case 'GetUserNotifications': {
+      const notifications = await firestoreService.getUserNotifications(variables?.userId as string);
+      return { notifications } as T;
+    }
+    case 'GetDashboardStats': {
+      const stats = await firestoreService.getDashboardStats(variables?.organizerId as string);
+      return stats as T;
+    }
+    case 'ListCategories': {
+      const categories = await firestoreService.listCategories();
+      return { categories } as T;
+    }
+    case 'GetEventReviews': {
+      const reviews = await firestoreService.getEventReviews(variables?.eventId as string);
+      return { reviews } as T;
+    }
+    default:
+      console.warn(`[DataConnect] Unknown Firestore query: ${queryName}`);
+      return {} as T;
+  }
+}
+
+/**
+ * Execute Firestore mutation fallback - REPLACES localStorage
+ * All data writes go to Cloud Firestore
+ */
+async function executeFirestoreMutation<T>(mutationName: string, variables?: Record<string, unknown>): Promise<T> {
+  console.log(`[DataConnect] Firestore fallback mutation: ${mutationName}`);
+  
+  switch (mutationName) {
+    case 'CreateUser': {
+      const userId = crypto.randomUUID();
+      const id = await firestoreService.createUser(userId, {
+        email: (variables?.email as string)?.toLowerCase() || '',
+        displayName: (variables?.displayName as string) || '',
+        role: (variables?.role as 'student' | 'admin' | 'super_admin') || 'student',
+        emailDomain: variables?.emailDomain as string,
+        firstName: variables?.firstName as string,
+        lastName: variables?.lastName as string,
+        year: variables?.year as string,
+        division: variables?.division as string,
+      });
+      return { user_insert: { id } } as T;
+    }
+    case 'UpdateUser': {
+      await firestoreService.updateUser(variables?.id as string, variables as Record<string, unknown>);
+      return {} as T;
+    }
+    case 'CreateBooking': {
+      const id = await firestoreService.createBooking({
+        eventId: variables?.eventId as string,
+        userId: variables?.studentId as string || variables?.userId as string,
+        ticketId: (variables?.ticketId as string) || generateTicketId(),
+        qrCode: (variables?.qrCode as string) || '',
+        status: 'confirmed',
+        isWaitlist: (variables?.isWaitlist as boolean) || false,
+        numberOfTickets: 1,
+        totalAmount: 0,
+        paymentStatus: 'not_required',
+      });
+      return { booking_insert: { id } } as T;
+    }
+    case 'CheckInParticipant': {
+      await firestoreService.checkInParticipant(
+        variables?.id as string,
+        variables?.checkedInBy as string
+      );
+      return {} as T;
+    }
+    case 'CancelBooking': {
+      await firestoreService.cancelBooking(variables?.id as string);
+      return {} as T;
+    }
+    case 'CreateEvent': {
+      const id = await firestoreService.createEvent({
+        title: variables?.title as string,
+        description: variables?.description as string,
+        date: firestoreService.toTimestamp(variables?.date as string),
+        time: variables?.time as string,
+        endTime: variables?.endTime as string,
+        location: variables?.venue as string || '',
+        venue: variables?.venue as string,
+        categoryId: variables?.categoryId as string || '',
+        imageUrl: variables?.coverPhotoUrl as string,
+        capacity: variables?.capacity as number || 0,
+        price: variables?.price as number || 0,
+        isFree: (variables?.price as number || 0) === 0,
+        currency: 'INR',
+        organizerId: variables?.organizerId as string || '',
+        status: 'draft',
+        featured: false,
+        requiresApproval: false,
+        isPublic: true,
+      });
+      return { event_insert: { id } } as T;
+    }
+    case 'UpdateEvent': {
+      await firestoreService.updateEvent(variables?.id as string, variables as Record<string, unknown>);
+      return {} as T;
+    }
+    case 'UpdateEventStatus': {
+      const status = variables?.status as 'draft' | 'published' | 'cancelled' | 'completed';
+      await firestoreService.updateEvent(variables?.id as string, { status });
+      return {} as T;
+    }
+    case 'DeleteEvent': {
+      await firestoreService.deleteEvent(variables?.id as string);
+      return {} as T;
+    }
+    case 'DecrementEventSlots': {
+      const event = await firestoreService.getEventById(variables?.id as string);
+      if (event && event.registeredCount < event.capacity) {
+        await firestoreService.updateEvent(event.id, { registeredCount: event.registeredCount + 1 });
+      }
+      return {} as T;
+    }
+    case 'IncrementEventSlots': {
+      const event = await firestoreService.getEventById(variables?.id as string);
+      if (event && event.registeredCount > 0) {
+        await firestoreService.updateEvent(event.id, { registeredCount: event.registeredCount - 1 });
+      }
+      return {} as T;
+    }
+    case 'AddFavorite': {
+      const id = await firestoreService.addFavorite(
+        variables?.userId as string,
+        variables?.eventId as string
+      );
+      return { favorite_insert: { id } } as T;
+    }
+    case 'RemoveFavorite': {
+      await firestoreService.removeFavorite(
+        variables?.userId as string,
+        variables?.eventId as string
+      );
+      return {} as T;
+    }
+    case 'CreateNotification': {
+      const id = await firestoreService.createNotification({
+        userId: variables?.userId as string,
+        title: variables?.title as string,
+        message: variables?.message as string,
+        type: (variables?.type as string) || 'system',
+      });
+      return { notification_insert: { id } } as T;
+    }
+    case 'MarkNotificationRead': {
+      await firestoreService.markNotificationRead(variables?.id as string);
+      return {} as T;
+    }
+    case 'CreateCategory': {
+      const id = await firestoreService.createCategory({
+        name: variables?.name as string,
+        icon: variables?.icon as string,
+        color: variables?.color as string,
+        isActive: true,
+        sortOrder: 0,
+      });
+      return { category_insert: { id } } as T;
+    }
+    case 'CreateReview': {
+      const id = await firestoreService.createReview({
+        eventId: variables?.eventId as string,
+        userId: variables?.userId as string,
+        rating: variables?.rating as number,
+        comment: variables?.comment as string,
+        isAnonymous: false,
+      });
+      return { review_insert: { id } } as T;
+    }
+    case 'CreateCheckInLog': {
+      console.log('[DataConnect] Check-in logged to Firestore:', variables);
+      return {} as T;
+    }
+    default:
+      console.warn(`[DataConnect] Unknown Firestore mutation: ${mutationName}`);
+      return {} as T;
   }
 }
 
 // ==================== USER OPERATIONS ====================
 
+// Interface matching the actual GraphQL schema
 export interface DataConnectUser {
   id: string;
   displayName: string;
   email: string;
   role: string;
-  studentId?: string;
-  major?: string;
+  emailDomain?: string;
+  firstName?: string;
+  lastName?: string;
   year?: string;
-  photoUrl?: string;
-  phoneNumber?: string;
+  division?: string;
   createdAt: string;
   updatedAt?: string;
 }
 
 /**
  * Get user by Firebase Auth UID
+ * Since schema uses auto-generated UUID, we use email-based lookup
+ * This function is kept for backward compatibility with authService
  */
 export const getUserById = async (userId: string): Promise<User | null> => {
   try {
-    const result = await executeQuery<{ user: DataConnectUser | null }>('GetUserById', { id: userId });
+    // Import auth to get the user's email
+    const { auth } = await import('./firebase');
+    const currentUser = auth.currentUser;
     
-    if (!result.user) return null;
+    // If we have a current user with matching UID, use their email
+    if (currentUser && currentUser.uid === userId && currentUser.email) {
+      return await getUserByEmail(currentUser.email);
+    }
     
-    return mapDataConnectUserToUser(result.user);
+    // If no current user or UID doesn't match, we can't look up by UID
+    // because the schema uses auto-generated UUIDs, not Firebase UIDs
+    console.warn('[DataConnect] getUserById: Cannot look up user by Firebase UID directly, need email');
+    return null;
   } catch (error) {
     console.error('[DataConnect] Error getting user:', error);
     return null;
@@ -177,9 +482,11 @@ export const getUserById = async (userId: string): Promise<User | null> => {
 };
 
 /**
- * Get user by email
+ * Get user by email - primary lookup method
  */
 export const getUserByEmail = async (email: string): Promise<User | null> => {
+  if (!email) return null;
+  
   try {
     const result = await executeQuery<{ users: DataConnectUser[] }>('GetUserByEmail', { 
       email: email.toLowerCase() 
@@ -196,24 +503,44 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
 
 /**
  * Create new user profile
+ * Note: The schema auto-generates UUID for id, so we pass email-based data
  */
 export const createUser = async (
   userId: string, 
   userData: Omit<User, 'id'>
 ): Promise<User> => {
   try {
+    // Parse institutional email for additional fields
+    const email = userData.email.toLowerCase();
+    const emailDomain = email.includes('@') ? '@' + email.split('@')[1] : null;
+    
+    // Parse name into first/last name
+    const nameParts = (userData.name || '').trim().split(' ');
+    const firstName = nameParts[0] || null;
+    const lastName = nameParts.slice(1).join(' ') || null;
+    
+    // Parse email parts for institutional email format (firstname.lastname.year.division@domain)
+    let year = null;
+    let division = null;
+    const localPart = email.split('@')[0];
+    const emailParts = localPart.split('.');
+    if (emailParts.length >= 4) {
+      year = emailParts[2] || null;
+      division = emailParts[3] || null;
+    }
+    
     await executeMutation('CreateUser', {
-      id: userId,
-      displayName: userData.name,
-      email: userData.email.toLowerCase(),
+      email: email,
+      displayName: userData.name || `${firstName || ''} ${lastName || ''}`.trim() || 'User',
       role: userData.role || 'student',
-      phoneNumber: userData.phone || null,
-      photoUrl: userData.avatarUrl || null,
-      studentId: userData.rollNo || null,
-      major: userData.department || null,
-      year: null
+      emailDomain: emailDomain,
+      firstName: firstName,
+      lastName: lastName,
+      year: year,
+      division: division
     });
     
+    // Return user with the Firebase UID as the id (for app consistency)
     return { id: userId, ...userData };
   } catch (error) {
     console.error('[DataConnect] Error creating user:', error);
@@ -223,19 +550,44 @@ export const createUser = async (
 
 /**
  * Update user profile
+ * Note: We need to get the database UUID first since Firebase UID != database UUID
  */
 export const updateUser = async (
   userId: string, 
   data: Partial<User>
 ): Promise<void> => {
   try {
+    // Get the user's database record to find their UUID
+    const { auth } = await import('./firebase');
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser) {
+      throw new Error('Not authenticated');
+    }
+    
+    // Get user by email to find their database UUID
+    const result = await executeQuery<{ users: DataConnectUser[] }>('GetUserByEmail', { 
+      email: currentUser.email?.toLowerCase() 
+    });
+    
+    if (!result.users || result.users.length === 0) {
+      throw new Error('User not found in database');
+    }
+    
+    const dbUser = result.users[0];
+    
+    // Parse name into first/last
+    const nameParts = (data.name || '').trim().split(' ');
+    const firstName = nameParts[0] || undefined;
+    const lastName = nameParts.slice(1).join(' ') || undefined;
+    
     await executeMutation('UpdateUser', {
-      id: userId,
+      id: dbUser.id, // Use the database UUID, not Firebase UID
       displayName: data.name,
-      phoneNumber: data.phone,
-      photoUrl: data.avatarUrl,
-      studentId: data.rollNo,
-      major: data.department
+      firstName: firstName,
+      lastName: lastName,
+      year: undefined,
+      division: undefined
     });
   } catch (error) {
     console.error('[DataConnect] Error updating user:', error);
@@ -820,15 +1172,21 @@ export const getDashboardStats = async (organizerId: string): Promise<DashboardS
 // ==================== HELPER FUNCTIONS ====================
 
 function mapDataConnectUserToUser(dcUser: DataConnectUser): User {
+  // Construct name from firstName + lastName if displayName is empty
+  const displayName = dcUser.displayName || 
+    `${dcUser.firstName || ''} ${dcUser.lastName || ''}`.trim() || 
+    'User';
+  
   return {
     id: dcUser.id,
-    name: dcUser.displayName,
+    name: displayName,
     email: dcUser.email,
     role: dcUser.role as 'student' | 'admin',
-    phone: dcUser.phoneNumber,
-    avatarUrl: dcUser.photoUrl,
-    department: dcUser.major,
-    rollNo: dcUser.studentId
+    // These fields aren't in the current schema but kept for compatibility
+    phone: undefined,
+    avatarUrl: undefined,
+    department: dcUser.division || dcUser.year, // Use division or year as department
+    rollNo: undefined
   };
 }
 

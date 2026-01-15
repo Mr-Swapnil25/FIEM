@@ -1,45 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getEvents, deleteEvent, subscribeToEvents } from '../../services/backend';
 import { Event, EventStatus } from '../../types';
+import { usePublishedEvents, useDeleteEvent } from '../../hooks';
+import { useRealtimeEvents } from '../../hooks/useRealtime';
 
 type FilterType = 'all' | 'published' | 'drafts' | 'past' | 'upcoming';
 
 export default function AdminEvents() {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      setLoading(true);
-      try {
-        const allEvents = await getEvents();
-        setEvents(allEvents);
-      } catch (error) {
-        console.error('Error fetching events:', error);
-      }
-      setLoading(false);
-    };
-    
-    fetchEvents();
-    
-    // Subscribe to real-time updates
-    const unsubscribe = subscribeToEvents((updatedEvents) => {
-      setEvents(updatedEvents);
-    });
-
-    return () => unsubscribe();
-  }, []);
+  // React Query hooks
+  const { data: events = [], isLoading: loading } = usePublishedEvents();
+  const deleteEventMutation = useDeleteEvent();
+  
+  // Real-time updates
+  useRealtimeEvents({ enabled: true });
 
   const handleDelete = async (eventId: string) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
-      await deleteEvent(eventId);
-      setEvents(events.filter(ev => ev.id !== eventId));
+      await deleteEventMutation.mutateAsync(eventId);
     }
     setMenuOpen(null);
   };
@@ -49,7 +32,7 @@ export default function AdminEvents() {
     setMenuOpen(null);
   };
 
-  const filteredEvents = events.filter(event => {
+  const filteredEvents = useMemo(() => events.filter(event => {
     const matchesSearch = event.title.toLowerCase().includes(search.toLowerCase());
     const eventDate = new Date(event.eventDate);
     const now = new Date();
@@ -68,7 +51,7 @@ export default function AdminEvents() {
       default:
         return true;
     }
-  });
+  }), [events, search, filter]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

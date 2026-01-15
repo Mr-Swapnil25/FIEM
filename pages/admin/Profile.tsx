@@ -1,26 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getEvents, getAdminStats } from '../../services/backend';
 import { Event } from '../../types';
 import { useAuth } from '../../App';
+import { usePublishedEvents } from '../../hooks';
 
 export default function AdminProfile() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
   const [darkMode, setDarkMode] = useState(true);
-  const [activeEvents, setActiveEvents] = useState(0);
 
-  useEffect(() => {
-    // Count active events
-    getEvents().then((events: Event[]) => {
-      const now = new Date();
-      const active = events.filter(e => new Date(e.eventDate) >= now && e.status === 'published');
-      setActiveEvents(active.length);
-    }).catch(error => {
-      console.error('Error fetching events:', error);
-    });
-  }, []);
+  // React Query hook for events
+  const { data: events = [] } = usePublishedEvents();
+  
+  // Calculate active events count
+  const activeEvents = useMemo(() => {
+    const now = new Date();
+    return events.filter(e => new Date(e.eventDate) >= now && e.status === 'published').length;
+  }, [events]);
 
   const handleLogout = () => {
     logout();

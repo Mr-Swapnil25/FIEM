@@ -166,7 +166,7 @@ class SimulatedBackend {
     return stored ? JSON.parse(stored) : defaultData;
   }
 
-  private save(key: string, data: any) {
+  private save<T>(key: string, data: T): void {
     localStorage.setItem(`eventease_${key}`, JSON.stringify(data));
   }
 

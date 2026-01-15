@@ -63,6 +63,14 @@ export type { DataConnectUser } from './dataConnectService';
 import { Event, Booking, EventStatus, User, DashboardStats } from '../types';
 import * as dataConnect from './dataConnectService';
 
+// Helper to extract error message
+function getErrorMessage(error: unknown, defaultMessage: string): string {
+  if (error instanceof Error) {
+    return error.message || defaultMessage;
+  }
+  return defaultMessage;
+}
+
 // ==================== SUBSCRIPTION FUNCTIONS (Polling-based) ====================
 // Note: Data Connect doesn't support real-time subscriptions like Firestore
 // These implementations use polling for backwards compatibility
@@ -286,9 +294,9 @@ export const bookEvent = async (
     const booking = await dataConnect.createBooking(userId, eventId, event.price);
     
     return { success: true, booking };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Backend] Book event error:', error);
-    return { success: false, error: error.message || 'Failed to book event' };
+    return { success: false, error: getErrorMessage(error, 'Failed to book event') };
   }
 };
 
@@ -321,9 +329,9 @@ export const cancelUserBooking = async (
     await dataConnect.cancelBooking(bookingId, booking.eventId);
     
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Backend] Cancel booking error:', error);
-    return { success: false, error: error.message || 'Failed to cancel booking' };
+    return { success: false, error: getErrorMessage(error, 'Failed to cancel booking') };
   }
 };
 
@@ -354,9 +362,9 @@ export const checkInByTicketId = async (
     const updatedBooking = await dataConnect.getBookingByTicketId(ticketId);
     
     return { success: true, booking: updatedBooking || booking };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Backend] Check in error:', error);
-    return { success: false, error: error.message || 'Failed to check in' };
+    return { success: false, error: getErrorMessage(error, 'Failed to check in') };
   }
 };
 
@@ -379,28 +387,9 @@ export const searchEvents = async (searchTerm: string): Promise<Event[]> => {
 // ==================== REVIEW OPERATIONS ====================
 
 import { Review, RatingDistribution } from '../types';
+import * as firestoreService from './firestoreService';
 
-// LocalStorage key for reviews
-const REVIEWS_STORAGE_KEY = 'eventease_reviews';
-
-/**
- * Get all reviews from storage
- */
-const getStoredReviews = (): Review[] => {
-  try {
-    const stored = localStorage.getItem(REVIEWS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-/**
- * Save reviews to storage
- */
-const saveReviews = (reviews: Review[]): void => {
-  localStorage.setItem(REVIEWS_STORAGE_KEY, JSON.stringify(reviews));
-};
+// ZERO localStorage - All reviews persist in Firestore
 
 /**
  * Get reviews for an event with pagination and sorting
@@ -409,32 +398,55 @@ export const getEventReviews = async (
   eventId: string,
   options: { sortBy?: 'recent' | 'highest' | 'lowest'; page?: number; pageSize?: number } = {}
 ): Promise<{ reviews: Review[]; total: number }> => {
-  await delay(300);
-  
   const { sortBy = 'recent', page = 1, pageSize = 10 } = options;
-  const allReviews = getStoredReviews().filter(r => r.eventId === eventId && !r.isFlagged);
   
-  // Sort reviews
-  const sorted = [...allReviews].sort((a, b) => {
-    switch (sortBy) {
-      case 'highest':
-        return b.rating - a.rating;
-      case 'lowest':
-        return a.rating - b.rating;
-      case 'recent':
-      default:
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    }
-  });
-  
-  // Paginate
-  const start = (page - 1) * pageSize;
-  const paginated = sorted.slice(start, start + pageSize);
-  
-  return {
-    reviews: paginated,
-    total: allReviews.length,
-  };
+  try {
+    // Get reviews from Firestore
+    const firestoreReviews = await firestoreService.getEventReviews(eventId);
+    
+    // Map to Review type and filter out flagged reviews
+    const allReviews: Review[] = firestoreReviews
+      .filter(r => !r.isFlagged && !r.isDeleted)
+      .map(r => ({
+        id: r.id,
+        userId: r.userId,
+        eventId: r.eventId,
+        rating: r.rating as 1 | 2 | 3 | 4 | 5,
+        comment: r.comment,
+        isAnonymous: r.isAnonymous,
+        createdAt: firestoreService.timestampToISO(r.createdAt),
+        updatedAt: r.updatedAt ? firestoreService.timestampToISO(r.updatedAt) : undefined,
+        userName: r.userName || 'User',
+        userPhoto: r.userAvatarUrl,
+        isFlagged: r.isFlagged,
+        flagReason: r.flagReason,
+      }));
+    
+    // Sort reviews
+    const sorted = [...allReviews].sort((a, b) => {
+      switch (sortBy) {
+        case 'highest':
+          return b.rating - a.rating;
+        case 'lowest':
+          return a.rating - b.rating;
+        case 'recent':
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
+    
+    // Paginate
+    const start = (page - 1) * pageSize;
+    const paginated = sorted.slice(start, start + pageSize);
+    
+    return {
+      reviews: paginated,
+      total: allReviews.length,
+    };
+  } catch (error) {
+    console.error('[Backend] Failed to get event reviews:', error);
+    return { reviews: [], total: 0 };
+  }
 };
 
 /**
@@ -444,9 +456,30 @@ export const getUserReviewForEvent = async (
   userId: string,
   eventId: string
 ): Promise<Review | null> => {
-  await delay(200);
-  const reviews = getStoredReviews();
-  return reviews.find(r => r.userId === userId && r.eventId === eventId) || null;
+  try {
+    const firestoreReviews = await firestoreService.getEventReviews(eventId);
+    const userReview = firestoreReviews.find(r => r.userId === userId && !r.isDeleted);
+    
+    if (!userReview) return null;
+    
+    return {
+      id: userReview.id,
+      userId: userReview.userId,
+      eventId: userReview.eventId,
+      rating: userReview.rating as 1 | 2 | 3 | 4 | 5,
+      comment: userReview.comment,
+      isAnonymous: userReview.isAnonymous,
+      createdAt: firestoreService.timestampToISO(userReview.createdAt),
+      updatedAt: userReview.updatedAt ? firestoreService.timestampToISO(userReview.updatedAt) : undefined,
+      userName: userReview.userName || 'User',
+      userPhoto: userReview.userAvatarUrl,
+      isFlagged: userReview.isFlagged,
+      flagReason: userReview.flagReason,
+    };
+  } catch (error) {
+    console.error('[Backend] Failed to get user review:', error);
+    return null;
+  }
 };
 
 /**
@@ -459,60 +492,72 @@ export const createReview = async (data: {
   comment?: string;
   isAnonymous: boolean;
 }): Promise<Review> => {
-  await delay(500);
-  
-  const reviews = getStoredReviews();
-  
-  // Check for duplicate
-  const existing = reviews.find(r => r.userId === data.userId && r.eventId === data.eventId);
-  if (existing) {
-    throw new Error('You have already reviewed this event');
+  try {
+    // Check for existing review
+    const existingReview = await getUserReviewForEvent(data.userId, data.eventId);
+    if (existingReview) {
+      throw new Error('You have already reviewed this event');
+    }
+    
+    // Get user info for the review
+    const user = await dataConnect.getUserById(data.userId);
+    
+    // Create review in Firestore
+    const reviewId = await firestoreService.createReview({
+      userId: data.userId,
+      eventId: data.eventId,
+      rating: data.rating,
+      comment: data.comment,
+      isAnonymous: data.isAnonymous,
+      userName: data.isAnonymous ? 'Anonymous' : user?.name || 'User',
+      userAvatarUrl: data.isAnonymous ? undefined : user?.avatarUrl,
+    });
+    
+    // Update event's aggregate rating
+    await updateEventRatingStats(data.eventId);
+    
+    return {
+      id: reviewId,
+      userId: data.userId,
+      eventId: data.eventId,
+      rating: data.rating,
+      comment: data.comment,
+      isAnonymous: data.isAnonymous,
+      createdAt: new Date().toISOString(),
+      userName: data.isAnonymous ? 'Anonymous' : user?.name || 'User',
+      userPhoto: data.isAnonymous ? undefined : user?.avatarUrl,
+      isFlagged: false,
+    };
+  } catch (error) {
+    console.error('[Backend] Failed to create review:', error);
+    throw error;
   }
-  
-  // Get user info for the review
-  const user = await dataConnect.getUserById(data.userId);
-  
-  const newReview: Review = {
-    id: `rev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    userId: data.userId,
-    eventId: data.eventId,
-    rating: data.rating,
-    comment: data.comment,
-    isAnonymous: data.isAnonymous,
-    createdAt: new Date().toISOString(),
-    userName: data.isAnonymous ? 'Anonymous' : user?.name || 'User',
-    userPhoto: data.isAnonymous ? undefined : user?.avatarUrl,
-    isFlagged: false,
-  };
-  
-  reviews.push(newReview);
-  saveReviews(reviews);
-  
-  // Update event's aggregate rating
-  await updateEventRatingStats(data.eventId);
-  
-  return newReview;
 };
 
 /**
- * Delete a review (admin only)
+ * Delete a review (soft delete)
  */
 export const deleteReview = async (reviewId: string): Promise<void> => {
-  await delay(300);
-  
-  const reviews = getStoredReviews();
-  const reviewIndex = reviews.findIndex(r => r.id === reviewId);
-  
-  if (reviewIndex === -1) {
-    throw new Error('Review not found');
+  try {
+    // Get review first to update event stats
+    const firestoreReviews = await firestoreService.getEventReviews('');
+    const review = firestoreReviews.find(r => r.id === reviewId);
+    
+    if (!review) {
+      throw new Error('Review not found');
+    }
+    
+    const eventId = review.eventId;
+    
+    // Soft delete the review
+    await firestoreService.deleteReview(reviewId);
+    
+    // Update event's aggregate rating
+    await updateEventRatingStats(eventId);
+  } catch (error) {
+    console.error('[Backend] Failed to delete review:', error);
+    throw error;
   }
-  
-  const eventId = reviews[reviewIndex].eventId;
-  reviews.splice(reviewIndex, 1);
-  saveReviews(reviews);
-  
-  // Update event's aggregate rating
-  await updateEventRatingStats(eventId);
 };
 
 /**
@@ -523,73 +568,97 @@ export const flagReview = async (
   flagged: boolean,
   reason?: string
 ): Promise<void> => {
-  await delay(200);
-  
-  const reviews = getStoredReviews();
-  const reviewIndex = reviews.findIndex(r => r.id === reviewId);
-  
-  if (reviewIndex === -1) {
-    throw new Error('Review not found');
+  try {
+    await firestoreService.flagReview(reviewId, reason || '');
+  } catch (error) {
+    console.error('[Backend] Failed to flag review:', error);
+    throw error;
   }
-  
-  reviews[reviewIndex] = {
-    ...reviews[reviewIndex],
-    isFlagged: flagged,
-    flagReason: reason,
-    updatedAt: new Date().toISOString(),
-  };
-  
-  saveReviews(reviews);
 };
 
 /**
  * Get all reviews (admin)
  */
 export const getAllReviews = async (): Promise<Review[]> => {
-  await delay(300);
-  const reviews = getStoredReviews();
-  
-  // Sort by most recent first
-  return reviews.sort((a, b) => 
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  try {
+    // Get all events first
+    const events = await firestoreService.listEvents();
+    
+    // Get reviews for all events
+    const allReviews: Review[] = [];
+    for (const event of events) {
+      const eventReviews = await firestoreService.getEventReviews(event.id);
+      for (const r of eventReviews) {
+        if (!r.isDeleted) {
+          allReviews.push({
+            id: r.id,
+            userId: r.userId,
+            eventId: r.eventId,
+            rating: r.rating as 1 | 2 | 3 | 4 | 5,
+            comment: r.comment,
+            isAnonymous: r.isAnonymous,
+            createdAt: firestoreService.timestampToISO(r.createdAt),
+            updatedAt: r.updatedAt ? firestoreService.timestampToISO(r.updatedAt) : undefined,
+            userName: r.userName || 'User',
+            userPhoto: r.userAvatarUrl,
+            isFlagged: r.isFlagged,
+            flagReason: r.flagReason,
+          });
+        }
+      }
+    }
+    
+    // Sort by most recent first
+    return allReviews.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  } catch (error) {
+    console.error('[Backend] Failed to get all reviews:', error);
+    return [];
+  }
 };
 
 /**
  * Update event's aggregate rating statistics
  */
 const updateEventRatingStats = async (eventId: string): Promise<void> => {
-  const reviews = getStoredReviews().filter(r => r.eventId === eventId && !r.isFlagged);
-  
-  if (reviews.length === 0) {
-    // Reset stats if no reviews
-    await dataConnect.updateEvent(eventId, {
-      averageRating: 0,
-      totalReviews: 0,
-      ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  try {
+    const firestoreReviews = await firestoreService.getEventReviews(eventId);
+    const reviews = firestoreReviews.filter(r => !r.isFlagged && !r.isDeleted);
+    
+    if (reviews.length === 0) {
+      // Reset stats if no reviews
+      await dataConnect.updateEvent(eventId, {
+        averageRating: 0,
+        totalReviews: 0,
+        ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+      });
+      return;
+    }
+    
+    // Calculate average
+    const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
+    const averageRating = Math.round((sum / reviews.length) * 10) / 10; // Round to 1 decimal
+    
+    // Calculate distribution
+    const ratingDistribution: RatingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    reviews.forEach(r => {
+      ratingDistribution[r.rating as 1 | 2 | 3 | 4 | 5]++;
     });
-    return;
+    
+    // Update event
+    await dataConnect.updateEvent(eventId, {
+      averageRating,
+      totalReviews: reviews.length,
+      ratingDistribution,
+    });
+  } catch (error) {
+    console.error('[Backend] Failed to update event rating stats:', error);
   }
-  
-  // Calculate average
-  const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
-  const averageRating = Math.round((sum / reviews.length) * 10) / 10; // Round to 1 decimal
-  
-  // Calculate distribution
-  const ratingDistribution: RatingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  reviews.forEach(r => {
-    ratingDistribution[r.rating as 1 | 2 | 3 | 4 | 5]++;
-  });
-  
-  // Update event
-  await dataConnect.updateEvent(eventId, {
-    averageRating,
-    totalReviews: reviews.length,
-    ratingDistribution,
-  });
 };
 
-// Helper delay function
+// Helper delay function (kept for any remaining async simulation)
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-console.log('[Backend] Using Firebase Data Connect with Cloud SQL');
+console.log('[Backend] Using Firebase Data Connect with Cloud SQL and Firestore fallback');
+console.log('[Backend] ZERO localStorage - All data persists in Firebase');

@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUserFavoriteEvents, removeFavorite, getUserFavorites } from '../../services/backend';
 import { Event } from '../../types';
 import { useAuth } from '../../App';
+import { useUserFavorites, useRemoveFavorite } from '../../hooks';
+import { getUserFavoriteEvents } from '../../services/backend';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface FavoriteWithEvent extends Event {
   favoriteId: string;
@@ -11,52 +13,42 @@ interface FavoriteWithEvent extends Event {
 export default function FavoritesList() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [favorites, setFavorites] = useState<FavoriteWithEvent[]>([]);
-  const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchFavorites = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+  // React Query hooks
+  const { data: favoriteRecords = [] } = useUserFavorites(user?.id);
+  const { data: favoriteEvents = [], isLoading: loading } = useQuery({
+    queryKey: ['favorites', 'events', user?.id || ''],
+    queryFn: () => getUserFavoriteEvents(user!.id),
+    enabled: !!user?.id,
+  });
+  const removeFavoriteMutation = useRemoveFavorite();
 
-      try {
-        // Get favorite records and events in parallel
-        const [favoriteRecords, events] = await Promise.all([
-          getUserFavorites(user.id),
-          getUserFavoriteEvents(user.id)
-        ]);
+  // Merge favorite records with event data
+  const favorites = useMemo((): FavoriteWithEvent[] => {
+    return favoriteEvents.map(event => {
+      const favoriteRecord = favoriteRecords.find(f => f.eventId === event.id);
+      return {
+        ...event,
+        favoriteId: favoriteRecord?.id || ''
+      };
+    }).filter(f => f.favoriteId);
+  }, [favoriteEvents, favoriteRecords]);
 
-        // Merge favorite IDs with event data
-        const favoritesWithEvents: FavoriteWithEvent[] = events.map(event => {
-          const favoriteRecord = favoriteRecords.find(f => f.eventId === event.id);
-          return {
-            ...event,
-            favoriteId: favoriteRecord?.id || ''
-          };
-        }).filter(f => f.favoriteId); // Only include valid favorites
-
-        setFavorites(favoritesWithEvents);
-      } catch (error) {
-        console.error('Error fetching favorites:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFavorites();
-  }, [user]);
-
-  const handleRemoveFavorite = async (favoriteId: string, e: React.MouseEvent) => {
+  const handleRemoveFavorite = async (favoriteId: string, eventId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (removingId) return;
+    if (removingId || !user?.id) return;
 
     setRemovingId(favoriteId);
     try {
-      await removeFavorite(favoriteId);
-      setFavorites(prev => prev.filter(f => f.favoriteId !== favoriteId));
+      await removeFavoriteMutation.mutateAsync({ 
+        favoriteId, 
+        userId: user.id, 
+        eventId 
+      });
+      // Also invalidate the favorite events query
+      queryClient.invalidateQueries({ queryKey: ['favorites', 'events', user.id] });
     } catch (error) {
       console.error('Error removing favorite:', error);
       alert('Failed to remove from favorites');
@@ -194,7 +186,7 @@ export default function FavoritesList() {
 
                 {/* Remove Button */}
                 <button
-                  onClick={(e) => handleRemoveFavorite(favorite.favoriteId, e)}
+                  onClick={(e) => handleRemoveFavorite(favorite.favoriteId, favorite.id, e)}
                   disabled={removingId === favorite.favoriteId}
                   className="relative z-10 shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors active:scale-95 disabled:opacity-50"
                   title="Remove from favorites"

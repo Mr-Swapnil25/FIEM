@@ -2,6 +2,9 @@ import React, { useState, useEffect, createContext, useContext, Suspense, lazy }
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate, Link } from 'react-router-dom';
 import { User } from './types';
 
+// Query Provider for React Query
+import { QueryProvider } from './providers/QueryProvider';
+
 // Firebase Auth Service
 import { onAuthStateChanged as subscribeToAuth, signIn, signUp, signOut, AuthResult } from './services/authService';
 
@@ -300,11 +303,13 @@ export default function App() {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUserProfile, isLoading }}>
-      <HashRouter>
-        <AppContent user={user} logout={logout} />
-      </HashRouter>
-    </AuthContext.Provider>
+    <QueryProvider>
+      <AuthContext.Provider value={{ user, login, register, logout, updateUserProfile, isLoading }}>
+        <HashRouter>
+          <AppContent user={user} logout={logout} />
+        </HashRouter>
+      </AuthContext.Provider>
+    </QueryProvider>
   );
 }
 

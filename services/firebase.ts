@@ -27,8 +27,11 @@ import {
   uploadBytesResumable,
   getDownloadURL,
   deleteObject,
+  listAll,
+  getMetadata,
   FirebaseStorage,
-  UploadTaskSnapshot
+  UploadTaskSnapshot,
+  UploadMetadata
 } from 'firebase/storage';
 
 // Firebase configuration from environment variables
@@ -143,11 +146,13 @@ export {
   uploadBytes,
   uploadBytesResumable,
   getDownloadURL,
-  deleteObject
+  deleteObject,
+  listAll,
+  getMetadata
 };
 
 // Export types
-export type { FirebaseUser, UploadTaskSnapshot };
+export type { FirebaseUser, UploadTaskSnapshot, UploadMetadata };
 
 // Storage paths
 export const STORAGE_PATHS = {

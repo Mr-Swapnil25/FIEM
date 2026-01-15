@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getEventById, createEvent, updateEvent, deleteEvent } from '../../services/backend';
 import { uploadEventImageCompressed, fileToDataUrl, UploadProgress } from '../../services/storageService';
 import { EventCategory } from '../../types';
 import { useAuth } from '../../App';
+import { useEvent, useCreateEvent, useUpdateEvent, useDeleteEvent } from '../../hooks';
 
 export default function CreateEditEvent() {
   const navigate = useNavigate();
@@ -12,6 +12,12 @@ export default function CreateEditEvent() {
   const isEditing = !!id;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // React Query hooks
+  const { data: existingEvent, isLoading: eventLoading } = useEvent(id, { enabled: isEditing });
+  const createEventMutation = useCreateEvent();
+  const updateEventMutation = useUpdateEvent();
+  const deleteEventMutation = useDeleteEvent();
+  
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -28,38 +34,27 @@ export default function CreateEditEvent() {
     category: 'Cultural' as EventCategory
   });
 
+  // Load existing event data when editing
   useEffect(() => {
-    if (isEditing && id) {
-      const loadEvent = async () => {
-        setLoading(true);
-        try {
-          const event = await getEventById(id);
-          if (event) {
-            const dateObj = new Date(event.eventDate);
-            setFormData({
-              title: event.title,
-              description: event.description,
-              date: dateObj.toISOString().split('T')[0],
-              time: dateObj.toTimeString().slice(0, 5),
-              venue: event.venue,
-              price: event.price,
-              totalSlots: event.totalSlots,
-              category: event.category
-            });
-            if (event.imageUrl) {
-              setCoverImage(event.imageUrl);
-            }
-          }
-        } catch (error) {
-          console.error('Error loading event:', error);
-        }
-        setLoading(false);
-      };
-      loadEvent();
+    if (isEditing && existingEvent) {
+      const dateObj = new Date(existingEvent.eventDate);
+      setFormData({
+        title: existingEvent.title,
+        description: existingEvent.description,
+        date: dateObj.toISOString().split('T')[0],
+        time: dateObj.toTimeString().slice(0, 5),
+        venue: existingEvent.venue,
+        price: existingEvent.price,
+        totalSlots: existingEvent.totalSlots,
+        category: existingEvent.category
+      });
+      if (existingEvent.imageUrl) {
+        setCoverImage(existingEvent.imageUrl);
+      }
     }
-  }, [id, isEditing]);
+  }, [existingEvent, isEditing]);
 
-  const handleChange = (field: string, value: any) => {
+  const handleChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -177,15 +172,18 @@ export default function CreateEditEvent() {
       const eventDate = new Date(`${formData.date}T${formData.time}`).toISOString();
       
       if (isEditing && id) {
-        await updateEvent(id, {
-          ...formData,
-          eventDate,
-          status: isDraft ? 'draft' : 'published',
-          imageUrl: imageUrl || undefined
+        await updateEventMutation.mutateAsync({
+          eventId: id,
+          data: {
+            ...formData,
+            eventDate,
+            status: isDraft ? 'draft' : 'published',
+            imageUrl: imageUrl || undefined
+          }
         });
         navigate('/admin/dashboard');
       } else {
-        const newEvent = await createEvent({
+        const result = await createEventMutation.mutateAsync({
           ...formData,
           eventDate,
           adminId: user?.id || 'admin',
@@ -195,7 +193,7 @@ export default function CreateEditEvent() {
         if (isDraft) {
           navigate('/admin/events');
         } else {
-          navigate('/admin/event-published', { state: { event: newEvent } });
+          navigate('/admin/event-published', { state: { eventId: result?.id } });
         }
       }
     } catch (e) {
@@ -212,7 +210,7 @@ export default function CreateEditEvent() {
     if (window.confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
       setLoading(true);
       try {
-        await deleteEvent(id);
+        await deleteEventMutation.mutateAsync(id);
         navigate('/admin/dashboard');
       } catch (e) {
         alert('Error deleting event');

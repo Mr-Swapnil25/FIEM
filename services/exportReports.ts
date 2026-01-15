@@ -1,6 +1,8 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+/**
+ * Export Reports Service
+ * Uses dynamic imports for jspdf and xlsx to reduce bundle size
+ */
+import type jsPDF from 'jspdf';
 import { Booking, Event } from '../types';
 
 export type ExportFormat = 'csv' | 'pdf' | 'excel';
@@ -46,8 +48,15 @@ export function exportToCSV({ participants, event }: ExportOptions): void {
 
 /**
  * Export participant data to PDF format with professional styling
+ * Uses dynamic import for jspdf to reduce bundle size
  */
-export function exportToPDF({ participants, event, stats }: ExportOptions): void {
+export async function exportToPDF({ participants, event, stats }: ExportOptions): Promise<void> {
+  // Dynamic import - only loads when PDF export is used
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ]);
+  
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   
@@ -140,8 +149,12 @@ export function exportToPDF({ participants, event, stats }: ExportOptions): void
 
 /**
  * Export participant data to Excel format
+ * Uses dynamic import for xlsx to reduce bundle size
  */
-export function exportToExcel({ participants, event, stats }: ExportOptions): void {
+export async function exportToExcel({ participants, event, stats }: ExportOptions): Promise<void> {
+  // Dynamic import - only loads when Excel export is used
+  const XLSX = await import('xlsx');
+  
   // Create workbook and worksheet
   const wb = XLSX.utils.book_new();
   
@@ -204,16 +217,16 @@ export function exportToExcel({ participants, event, stats }: ExportOptions): vo
 /**
  * Main export function that routes to the appropriate format handler
  */
-export function exportReport(format: ExportFormat, options: ExportOptions): void {
+export async function exportReport(format: ExportFormat, options: ExportOptions): Promise<void> {
   switch (format) {
     case 'csv':
       exportToCSV(options);
       break;
     case 'pdf':
-      exportToPDF(options);
+      await exportToPDF(options);
       break;
     case 'excel':
-      exportToExcel(options);
+      await exportToExcel(options);
       break;
   }
 }

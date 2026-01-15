@@ -1,0 +1,186 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ============================================================================
+    // HELPER FUNCTIONS
+    // ============================================================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns this resource
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Check if user is admin (based on custom claims)
+    function isAdmin() {
+      return request.auth != null && 
+             (request.auth.token.role == 'admin' || request.auth.token.role == 'super_admin');
+    }
+    
+    // Validate image file types
+    function isValidImage() {
+      return request.resource.contentType.matches('image/(jpeg|jpg|png|gif|webp)');
+    }
+    
+    // Validate document file types
+    function isValidDocument() {
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('image/(jpeg|jpg|png)');
+    }
+    
+    // File size limits
+    function isUnderSize(maxSizeMB) {
+      return request.resource.size < maxSizeMB * 1024 * 1024;
+    }
+    
+    // ============================================================================
+    // AVATAR IMAGES
+    // Path: /avatars/{userId}/avatar_{timestamp}.{ext}
+    // ============================================================================
+    
+    match /avatars/{userId}/{fileName} {
+      // Anyone can read avatars (public profile pictures)
+      allow read: if true;
+      
+      // Only the owner can upload their avatar
+      // - Must be authenticated
+      // - Must be the owner of the folder
+      // - Must be a valid image
+      // - Must be under 2MB
+      allow write: if isAuthenticated() 
+                   && isOwner(userId) 
+                   && isValidImage()
+                   && isUnderSize(2);
+      
+      // Only the owner can delete their avatar
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // ============================================================================
+    // ID CARD UPLOADS (Private - Sensitive Documents)
+    // Path: /id-cards/{userId}/idcard_{timestamp}.{ext}
+    // ============================================================================
+    
+    match /id-cards/{userId}/{fileName} {
+      // Only owner and admins can read ID cards
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      
+      // Only the owner can upload their ID card
+      // - Must be authenticated
+      // - Must be the owner
+      // - Must be valid document (PDF or image)
+      // - Must be under 5MB
+      allow write: if isAuthenticated() 
+                   && isOwner(userId) 
+                   && isValidDocument()
+                   && isUnderSize(5);
+      
+      // Only owner or admin can delete
+      allow delete: if isAuthenticated() && (isOwner(userId) || isAdmin());
+    }
+    
+    // ============================================================================
+    // EVENT IMAGES
+    // Path: /events/{eventId}/cover_{timestamp}.{ext}
+    // Path: /events/{eventId}/gallery/{imageId}.{ext}
+    // ============================================================================
+    
+    match /events/{eventId}/{allPaths=**} {
+      // Anyone can read event images (public)
+      allow read: if true;
+      
+      // Only admins can upload event images
+      // - Must be valid image
+      // - Must be under 5MB
+      allow write: if isAdmin() 
+                   && isValidImage()
+                   && isUnderSize(5);
+      
+      // Only admins can delete event images
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // TICKET PDFs (Generated Tickets)
+    // Path: /tickets/{userId}/{bookingId}/ticket_{ticketId}.pdf
+    // ============================================================================
+    
+    match /tickets/{userId}/{bookingId}/{fileName} {
+      // Only the owner can read their tickets
+      allow read: if isAuthenticated() && isOwner(userId);
+      
+      // Only the owner can upload (or Cloud Functions)
+      // - Must be under 1MB
+      allow write: if isAuthenticated() 
+                   && isOwner(userId) 
+                   && isUnderSize(1);
+      
+      // Owner can delete their tickets
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // ============================================================================
+    // TEMPORARY UPLOADS (For processing)
+    // Path: /temp/{uploadId}/{filename}
+    // Auto-cleanup should be configured via Cloud Functions
+    // ============================================================================
+    
+    match /temp/{uploadId}/{fileName} {
+      // Only authenticated users can access temp uploads
+      allow read: if isAuthenticated();
+      
+      // Authenticated users can upload to temp
+      // - Must be under 10MB
+      allow write: if isAuthenticated() && isUnderSize(10);
+      
+      // Cleanup allowed
+      allow delete: if isAuthenticated();
+    }
+    
+    // ============================================================================
+    // EXPORTS (Admin Data Exports)
+    // Path: /exports/{date}/{exportType}_{timestamp}.csv
+    // ============================================================================
+    
+    match /exports/{allPaths=**} {
+      // Only admins can read exports
+      allow read: if isAdmin();
+      
+      // Only Cloud Functions can write (via Admin SDK)
+      allow write: if false;
+      
+      // Admins can delete old exports
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // ANNOUNCEMENTS ATTACHMENTS
+    // Path: /announcements/{eventId}/{announcementId}/{fileName}
+    // ============================================================================
+    
+    match /announcements/{eventId}/{announcementId}/{fileName} {
+      // Authenticated users can read announcement attachments
+      allow read: if isAuthenticated();
+      
+      // Only admins can upload
+      allow write: if isAdmin() && isUnderSize(5);
+      
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // DEFAULT DENY
+    // All other paths are denied by default
+    // ============================================================================
+    
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

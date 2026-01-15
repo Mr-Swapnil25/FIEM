@@ -1,30 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAuth } from '../../App';
 import { useNavigate } from 'react-router-dom';
-import { getUserBookings } from '../../services/backend';
 import { Booking } from '../../types';
+import { useUserBookings } from '../../hooks';
 
 export default function StudentProfile() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchBookings = async () => {
-      if (user) {
-        try {
-          const data = await getUserBookings(user.id);
-          setBookings(data);
-        } catch (error) {
-          console.error('Error fetching bookings:', error);
-        }
-        setLoading(false);
-      }
-    };
-    fetchBookings();
-  }, [user]);
+  // React Query hook for bookings
+  const { data: bookings = [], isLoading: loading } = useUserBookings(user?.id);
 
   const handleLogout = () => {
     logout();
@@ -50,10 +36,10 @@ export default function StudentProfile() {
 
   if (!user) return null;
 
-  const filteredBookings = bookings.filter(booking => {
+  const filteredBookings = useMemo(() => bookings.filter(booking => {
     const isPast = new Date(booking.eventDate!) < new Date();
     return activeTab === 'upcoming' ? !isPast : isPast;
-  });
+  }), [bookings, activeTab]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

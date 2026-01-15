@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getEventById, createBooking, getUserBookings } from '../../services/backend';
 import { Event, Booking } from '../../types';
 import { useAuth } from '../../App';
+import { useEvent, useUserBookings, useCreateBooking, useExistingBooking } from '../../hooks';
+import { useRealtimeEvent } from '../../hooks/useRealtime';
 import { useFavoriteForEvent } from '../../hooks/useFavorites';
 import { useEventReviews, useReviewSubmission } from '../../hooks/useReviews';
 import { RatingBadge } from '../../components/StarRating';
@@ -13,11 +14,25 @@ export default function EventDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [event, setEvent] = useState<Event | null>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // React Query hooks - replaces manual useState/useEffect for data fetching
+  const { data: event, isLoading: eventLoading, error: eventError } = useEvent(id);
+  const { data: userBookings = [], isLoading: bookingsLoading } = useUserBookings(user?.id);
+  const { data: hasExistingBooking = false } = useExistingBooking(user?.id, id);
+  const createBookingMutation = useCreateBooking();
+  
+  // Enable real-time updates for this event
+  const { isConnected } = useRealtimeEvent(id, { enabled: !!id });
+  
+  const loading = eventLoading || bookingsLoading;
   const [bookingLoading, setBookingLoading] = useState(false);
-  const [isBooked, setIsBooked] = useState(false);
-  const [userBookings, setUserBookings] = useState<Booking[]>([]);
+  
+  // Check if user already booked this event
+  const isBooked = useMemo(() => {
+    return hasExistingBooking || userBookings.some(
+      b => b?.eventId === id && b?.status !== 'cancelled'
+    );
+  }, [hasExistingBooking, userBookings, id]);
   
   // Use the favorites hook for persistent favorite state
   const { 
@@ -46,60 +61,7 @@ export default function EventDetails() {
     submitting,
     submitReview,
     error: submitError,
-  } = useReviewSubmission(user?.id, id, event, userBookings);
-
-  useEffect(() => {
-    // SECURITY: Abort controller to prevent memory leaks and race conditions
-    const abortController = new AbortController();
-    
-    const load = async () => {
-      // Validate required parameters
-      if (!id || !user?.id) {
-        setLoading(false);
-        return;
-      }
-      
-      // SECURITY: Validate ID format to prevent injection
-      if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-        console.error('Invalid event ID format');
-        setLoading(false);
-        return;
-      }
-      
-      try {
-        const [eventData, bookings] = await Promise.all([
-          getEventById(id),
-          getUserBookings(user.id)
-        ]);
-
-        // Check if component is still mounted
-        if (abortController.signal.aborted) return;
-
-        setEvent(eventData || null);
-        setUserBookings(bookings || []);
-        
-        // Check if user already booked this event with null-safe access
-        const hasBooked = (bookings || []).some(
-          b => b?.eventId === id && b?.status !== 'cancelled'
-        );
-        setIsBooked(hasBooked);
-      } catch (error) {
-        if (!abortController.signal.aborted) {
-          console.error('Error loading event:', error);
-          setEvent(null);
-        }
-      } finally {
-        if (!abortController.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    };
-    
-    load();
-    
-    // Cleanup function to prevent state updates on unmounted component
-    return () => abortController.abort();
-  }, [id, user]);
+  } = useReviewSubmission(user?.id, id, event ?? null, userBookings);
 
   const handleBook = async () => {
     // SECURITY: Validate all required data before proceeding
@@ -124,7 +86,7 @@ export default function EventDetails() {
 
     setBookingLoading(true);
     try {
-      await createBooking(user.id, event.id);
+      await createBookingMutation.mutateAsync({ userId: user.id, eventId: event.id });
       navigate('/student/booking-success', { state: { event } });
     } catch (e) {
       // SECURITY: Don't expose internal error details to users

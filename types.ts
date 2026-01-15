@@ -40,6 +40,7 @@ export interface Event {
 }
 
 export interface RatingDistribution {
+  [key: number]: number;
   1: number;
   2: number;
   3: number;

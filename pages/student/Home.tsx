@@ -1,18 +1,26 @@
-import React, { useEffect, useState } from 'react';
-import { getEvents, getUserBookings, subscribeToEvents } from '../../services/backend';
-import { Event, EventStatus, EventCategory, Booking } from '../../types';
+import React, { useState, useMemo } from 'react';
+import { Event, EventStatus, EventCategory } from '../../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../App';
 import { Plus, Users, Calendar, MapPin, RefreshCw } from 'lucide-react';
 import { RatingBadge } from '../../components/StarRating';
+import { usePublishedEvents, useUserBookings } from '../../hooks';
+import { useRealtimeEvents } from '../../hooks/useRealtime';
+import { LiveIndicator } from '../../components/LiveIndicator';
 
 export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [bookings, setBookings] = useState<Booking[]>([]);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // React Query hooks - replaces manual useState/useEffect
+  const { data: events = [], isLoading: eventsLoading, refetch: refetchEvents } = usePublishedEvents();
+  const { data: bookings = [], isLoading: bookingsLoading } = useUserBookings(user?.id);
+  
+  // Enable real-time updates via Firestore
+  const { isConnected } = useRealtimeEvents({ enabled: true });
+  
+  const loading = eventsLoading || bookingsLoading;
   
   // Student Filters
   const [filter, setFilter] = useState<'current' | 'upcoming' | 'past'>('upcoming');
@@ -24,36 +32,9 @@ export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) 
   // Admin Filters
   const [statusFilter, setStatusFilter] = useState<EventStatus | 'all'>('all');
 
-  const fetchEvents = async () => {
-    setLoading(true);
-    try {
-      const allEvents = await getEvents();
-      setEvents(allEvents);
-      if (user) {
-        const userBookings = await getUserBookings(user.id);
-        setBookings(userBookings);
-      }
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    }
-    setLoading(false);
-  };
+  const bookedEventIds = useMemo(() => bookings.map(b => b.eventId), [bookings]);
 
-  useEffect(() => {
-    // Initial fetch
-    fetchEvents();
-    
-    // Subscribe to real-time updates
-    const unsubscribe = subscribeToEvents((updatedEvents) => {
-      setEvents(updatedEvents);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  const bookedEventIds = bookings.map(b => b.eventId);
-
-  const filteredEvents = events.filter(e => {
+  const filteredEvents = useMemo(() => events.filter(e => {
     const matchesSearch = e.title.toLowerCase().includes(search.toLowerCase()) || 
                           e.category.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter === 'all' ? true : e.category === categoryFilter;
@@ -78,7 +59,7 @@ export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) 
        }
        return matchesSearch && matchesDate && isPublished && matchesCategory;
     }
-  });
+  }), [events, search, categoryFilter, isAdmin, statusFilter, filter]);
 
   const categories: EventCategory[] = ['Cultural', 'Technical', 'Sports', 'Workshop', 'Seminar', 'Other'];
   const statuses: EventStatus[] = ['draft', 'published', 'completed', 'cancelled'];

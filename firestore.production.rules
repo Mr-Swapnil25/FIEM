@@ -1,0 +1,424 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================================
+    // HELPER FUNCTIONS
+    // ============================================================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns this resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Check if user is admin (based on custom claims)
+    function isAdmin() {
+      return isAuthenticated() && 
+             (request.auth.token.role == 'admin' || request.auth.token.role == 'super_admin');
+    }
+    
+    // Check if user is super admin
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'super_admin';
+    }
+    
+    // Validate email domain for institutional users
+    function hasValidInstitutionalEmail() {
+      return isAuthenticated() && 
+             request.auth.token.email.matches('.*@teamfuture\\.in$');
+    }
+    
+    // Validate required fields exist
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    // Check if only allowed fields are being modified
+    function onlyUpdates(allowedFields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    }
+    
+    // Validate timestamp is server-generated (prevent manipulation)
+    function hasServerTimestamp(field) {
+      return request.resource.data[field] == request.time;
+    }
+    
+    // Check if record is not soft-deleted
+    function isNotDeleted() {
+      return resource.data.isDeleted == false;
+    }
+    
+    // Validate rating is between 1-5
+    function isValidRating(rating) {
+      return rating >= 1 && rating <= 5;
+    }
+    
+    // ============================================================================
+    // SYSTEM COLLECTIONS (Cloud Functions only)
+    // ============================================================================
+    
+    match /rateLimits/{document} {
+      allow read, write: if false;
+    }
+    
+    match /cspViolations/{document} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    
+    match /alerts/{document} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    
+    match /_metadata/{document} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+    
+    // ============================================================================
+    // USERS COLLECTION
+    // ============================================================================
+    
+    match /users/{userId} {
+      // Users can read their own profile, admins can read all
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Users can create their own profile with required fields
+      allow create: if isOwner(userId) 
+                    && hasRequiredFields(['displayName', 'email', 'role'])
+                    && request.resource.data.email == request.auth.token.email
+                    && request.resource.data.role in ['student', 'admin']
+                    && request.resource.data.isDeleted == false;
+      
+      // Users can update their own profile (restricted fields)
+      allow update: if isOwner(userId)
+                    && request.resource.data.email == resource.data.email  // Cannot change email
+                    && request.resource.data.role == resource.data.role    // Cannot change role
+                    && isNotDeleted();
+      
+      // Only super admins can change roles
+      allow update: if isSuperAdmin();
+      
+      // Soft delete only by admin
+      allow update: if isAdmin() 
+                    && request.resource.data.isDeleted == true
+                    && onlyUpdates(['isDeleted', 'deletedAt', 'updatedAt']);
+      
+      // Hard delete by super admin only
+      allow delete: if isSuperAdmin();
+      
+      // User subcollections
+      match /bookings/{bookingId} {
+        allow read: if isOwner(userId);
+        allow write: if false; // Use top-level bookings collection
+      }
+      
+      match /favorites/{favoriteId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
+      }
+      
+      match /notifications/{notificationId} {
+        allow read: if isOwner(userId);
+        allow update: if isOwner(userId) 
+                      && onlyUpdates(['read', 'readAt', 'updatedAt']);
+        allow create, delete: if false; // Cloud Functions only
+      }
+    }
+    
+    // ============================================================================
+    // CATEGORIES COLLECTION
+    // ============================================================================
+    
+    match /categories/{categoryId} {
+      // Anyone authenticated can read active categories
+      allow read: if isAuthenticated() && resource.data.isActive == true;
+      
+      // Admins can read all categories
+      allow read: if isAdmin();
+      
+      // Only admins can manage categories
+      allow create: if isAdmin() 
+                    && hasRequiredFields(['name', 'isActive']);
+      
+      allow update: if isAdmin();
+      
+      allow delete: if isSuperAdmin();
+    }
+    
+    // ============================================================================
+    // EVENTS COLLECTION
+    // ============================================================================
+    
+    match /events/{eventId} {
+      // Public read for published events
+      allow read: if resource.data.status == 'published' 
+                  && resource.data.isPublic == true
+                  && resource.data.isDeleted == false;
+      
+      // Authenticated users can read all non-deleted published events
+      allow read: if isAuthenticated() 
+                  && resource.data.isDeleted == false;
+      
+      // Admins can read all events including drafts and deleted
+      allow read: if isAdmin();
+      
+      // Only admins can create events
+      allow create: if isAdmin()
+                    && hasRequiredFields(['title', 'description', 'date', 'time', 'location', 'capacity', 'organizerId'])
+                    && request.resource.data.isDeleted == false
+                    && request.resource.data.registeredCount == 0;
+      
+      // Only the organizer or admin can update
+      allow update: if isAdmin() 
+                    || (isAuthenticated() && resource.data.organizerId == request.auth.uid);
+      
+      // Soft delete only
+      allow update: if isAdmin() 
+                    && request.resource.data.isDeleted == true
+                    && onlyUpdates(['isDeleted', 'deletedAt', 'updatedAt', 'status']);
+      
+      // Hard delete by super admin only
+      allow delete: if isSuperAdmin();
+      
+      // Event subcollections
+      match /reviews/{reviewId} {
+        allow read: if resource.data.isApproved == true 
+                    && resource.data.isDeleted == false;
+        allow read: if isAdmin();
+        allow create: if isAuthenticated()
+                      && request.resource.data.userId == request.auth.uid
+                      && hasRequiredFields(['userId', 'eventId', 'rating'])
+                      && isValidRating(request.resource.data.rating);
+        allow update: if isAuthenticated() 
+                      && resource.data.userId == request.auth.uid
+                      && resource.data.isDeleted == false;
+        allow update: if isAdmin(); // Moderation
+        allow delete: if false;
+      }
+      
+      match /announcements/{announcementId} {
+        allow read: if isAuthenticated();
+        allow create: if isAdmin()
+                      && hasRequiredFields(['title', 'message', 'createdBy']);
+        allow update, delete: if isAdmin();
+      }
+      
+      match /bookings/{bookingId} {
+        // Mirror collection - read only for admins
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+    
+    // ============================================================================
+    // BOOKINGS COLLECTION (Top-level for ticket lookup)
+    // ============================================================================
+    
+    match /bookings/{bookingId} {
+      // Users can read their own bookings
+      allow read: if isAuthenticated() 
+                  && resource.data.userId == request.auth.uid
+                  && resource.data.isDeleted == false;
+      
+      // Admins can read all bookings
+      allow read: if isAdmin();
+      
+      // Authenticated users can create bookings for themselves
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasRequiredFields(['userId', 'eventId', 'ticketId', 'status'])
+                    && request.resource.data.isDeleted == false;
+      
+      // Users can only cancel their own confirmed bookings
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid
+                    && resource.data.isDeleted == false
+                    && resource.data.status in ['confirmed', 'waitlist']
+                    && request.resource.data.status == 'cancelled'
+                    && onlyUpdates(['status', 'cancelledAt', 'cancelReason', 'updatedAt']);
+      
+      // Admins can update any booking (check-in, status changes)
+      allow update: if isAdmin();
+      
+      // Soft delete only
+      allow update: if isAdmin() 
+                    && request.resource.data.isDeleted == true
+                    && onlyUpdates(['isDeleted', 'deletedAt', 'updatedAt']);
+      
+      // No hard deletes
+      allow delete: if false;
+    }
+    
+    // ============================================================================
+    // FAVORITES COLLECTION (Top-level for cross-queries)
+    // ============================================================================
+    
+    match /favorites/{favoriteId} {
+      // Users can read their own favorites
+      allow read: if isAuthenticated() 
+                  && resource.data.userId == request.auth.uid;
+      
+      // Users can add favorites for themselves
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasRequiredFields(['userId', 'eventId']);
+      
+      // Users can remove their own favorites
+      allow delete: if isAuthenticated() 
+                    && resource.data.userId == request.auth.uid;
+      
+      // No updates
+      allow update: if false;
+    }
+    
+    // ============================================================================
+    // NOTIFICATIONS COLLECTION
+    // ============================================================================
+    
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if isAuthenticated() 
+                  && resource.data.userId == request.auth.uid;
+      
+      // Admins can read all notifications
+      allow read: if isAdmin();
+      
+      // Users can only mark their own notifications as read
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid
+                    && onlyUpdates(['read', 'readAt', 'updatedAt']);
+      
+      // Only Cloud Functions/Admins can create notifications
+      allow create: if isAdmin()
+                    && hasRequiredFields(['userId', 'title', 'message', 'type']);
+      
+      // Clean up by admin
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // REVIEWS COLLECTION (Top-level for aggregation)
+    // ============================================================================
+    
+    match /reviews/{reviewId} {
+      // Anyone can read approved, non-deleted reviews
+      allow read: if resource.data.isApproved == true 
+                  && resource.data.isDeleted == false;
+      
+      // Admins can read all reviews
+      allow read: if isAdmin();
+      
+      // Authenticated users can create reviews
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasRequiredFields(['userId', 'eventId', 'rating'])
+                    && isValidRating(request.resource.data.rating)
+                    && request.resource.data.isDeleted == false;
+      
+      // Users can update their own non-deleted reviews
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid
+                    && resource.data.isDeleted == false
+                    && onlyUpdates(['rating', 'comment', 'updatedAt']);
+      
+      // Admins can moderate reviews (flag, approve, delete)
+      allow update: if isAdmin();
+      
+      // No hard deletes
+      allow delete: if false;
+    }
+    
+    // ============================================================================
+    // CHECK-IN LOGS COLLECTION (Audit Trail)
+    // ============================================================================
+    
+    match /checkInLogs/{logId} {
+      // Only admins can read check-in logs
+      allow read: if isAdmin();
+      
+      // Only admins can create check-in logs
+      allow create: if isAdmin()
+                    && hasRequiredFields(['bookingId', 'eventId', 'userId', 'checkedInBy', 'method']);
+      
+      // Logs are immutable
+      allow update, delete: if false;
+    }
+    
+    // ============================================================================
+    // PAYMENT TRANSACTIONS COLLECTION
+    // ============================================================================
+    
+    match /paymentTransactions/{transactionId} {
+      // Users can read their own transactions
+      allow read: if isAuthenticated() 
+                  && resource.data.userId == request.auth.uid;
+      
+      // Admins can read all transactions
+      allow read: if isAdmin();
+      
+      // Only Cloud Functions can create/update (payment webhook)
+      allow create, update: if false;
+      
+      // No deletes - financial records
+      allow delete: if false;
+    }
+    
+    // ============================================================================
+    // FILE UPLOADS METADATA
+    // ============================================================================
+    
+    match /fileUploads/{fileId} {
+      // Users can read their own file metadata
+      allow read: if isAuthenticated() 
+                  && resource.data.userId == request.auth.uid
+                  && resource.data.isDeleted == false;
+      
+      // Admins can read all
+      allow read: if isAdmin();
+      
+      // Users can create metadata for their uploads
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasRequiredFields(['userId', 'type', 'filename', 'storagePath']);
+      
+      // Soft delete only
+      allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid)
+                    && request.resource.data.isDeleted == true
+                    && onlyUpdates(['isDeleted', 'deletedAt', 'updatedAt']);
+      
+      // Admin updates
+      allow update: if isAdmin();
+      
+      // No hard deletes
+      allow delete: if false;
+    }
+    
+    // ============================================================================
+    // DAILY EVENT METRICS (Analytics)
+    // ============================================================================
+    
+    match /dailyEventMetrics/{metricId} {
+      // Admins can read metrics
+      allow read: if isAdmin();
+      
+      // Only Cloud Functions can write
+      allow write: if false;
+    }
+    
+    // ============================================================================
+    // DEFAULT DENY
+    // ============================================================================
+    
+    // Deny all other collections by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,839 @@
+# ============================================================================
+# EventEase Production Mutations
+# Firebase Data Connect - Cloud SQL PostgreSQL
+# ============================================================================
+#
+# Mutation naming conventions:
+# - Create[Entity] - Insert new record
+# - Update[Entity] - Update existing record
+# - Delete[Entity] - Soft delete (sets isDeleted = true)
+# - HardDelete[Entity] - Permanent delete (admin only)
+# - [Action][Entity] - Specific actions (CancelBooking, CheckInParticipant)
+#
+# Auth levels:
+# - USER: Requires valid Firebase Auth token
+# - (Role checks done in application layer)
+# ============================================================================
+
+# ============================================================================
+# USER MUTATIONS
+# ============================================================================
+
+"""
+Create a new user profile
+Called after Firebase Auth registration
+"""
+mutation CreateUser(
+  $id: UUID
+  $email: String!
+  $displayName: String!
+  $role: String! = "student"
+  $emailDomain: String
+  $firstName: String
+  $lastName: String
+  $year: String
+  $division: String
+  $department: String
+  $rollNo: String
+  $phone: String
+) @auth(level: PUBLIC) {
+  user_insert(data: {
+    id: $id
+    email: $email
+    displayName: $displayName
+    role: $role
+    emailDomain: $emailDomain
+    firstName: $firstName
+    lastName: $lastName
+    year: $year
+    division: $division
+    department: $department
+    rollNo: $rollNo
+    phone: $phone
+    isDeleted: false
+  })
+}
+
+"""
+Update user profile
+"""
+mutation UpdateUser(
+  $id: UUID!
+  $displayName: String
+  $firstName: String
+  $lastName: String
+  $year: String
+  $division: String
+  $department: String
+  $rollNo: String
+  $phone: String
+  $avatarUrl: String
+  $collegeIdUrl: String
+) @auth(level: USER) {
+  user_update(id: $id, data: {
+    displayName: $displayName
+    firstName: $firstName
+    lastName: $lastName
+    year: $year
+    division: $division
+    department: $department
+    rollNo: $rollNo
+    phone: $phone
+    avatarUrl: $avatarUrl
+    collegeIdUrl: $collegeIdUrl
+  })
+}
+
+"""
+Update user's last login timestamp
+"""
+mutation UpdateUserLastLogin($id: UUID!) @auth(level: USER) {
+  user_update(id: $id, data: {
+    lastLoginAt: { expr: "request.time" }
+  })
+}
+
+"""
+Update user role (admin only - validated in app layer)
+"""
+mutation UpdateUserRole(
+  $id: UUID!
+  $role: String!
+) @auth(level: USER) {
+  user_update(id: $id, data: {
+    role: $role
+  })
+}
+
+"""
+Soft delete user
+"""
+mutation DeleteUser($id: UUID!) @auth(level: USER) {
+  user_update(id: $id, data: {
+    isDeleted: true
+    deletedAt: { expr: "request.time" }
+  })
+}
+
+# ============================================================================
+# CATEGORY MUTATIONS
+# ============================================================================
+
+"""
+Create a new category (admin only)
+"""
+mutation CreateCategory(
+  $name: String!
+  $description: String
+  $icon: String
+  $color: String
+  $sortOrder: Int = 0
+) @auth(level: USER) {
+  category_insert(data: {
+    name: $name
+    description: $description
+    icon: $icon
+    color: $color
+    sortOrder: $sortOrder
+    isActive: true
+  })
+}
+
+"""
+Update category
+"""
+mutation UpdateCategory(
+  $id: UUID!
+  $name: String
+  $description: String
+  $icon: String
+  $color: String
+  $sortOrder: Int
+  $isActive: Boolean
+) @auth(level: USER) {
+  category_update(id: $id, data: {
+    name: $name
+    description: $description
+    icon: $icon
+    color: $color
+    sortOrder: $sortOrder
+    isActive: $isActive
+  })
+}
+
+"""
+Delete category (hard delete)
+"""
+mutation DeleteCategory($id: UUID!) @auth(level: USER) {
+  category_delete(id: $id)
+}
+
+# ============================================================================
+# EVENT MUTATIONS
+# ============================================================================
+
+"""
+Create a new event (admin only)
+"""
+mutation CreateEvent(
+  $title: String!
+  $description: String!
+  $shortDescription: String
+  $date: Date!
+  $time: String!
+  $endTime: String
+  $location: String!
+  $venue: String
+  $imageUrl: String
+  $categoryId: UUID!
+  $categoryName: String
+  $organizerId: UUID!
+  $organizerName: String
+  $capacity: Int!
+  $price: Float = 0
+  $isFree: Boolean = true
+  $currency: String = "INR"
+  $status: String = "draft"
+  $featured: Boolean = false
+  $requiresApproval: Boolean = false
+  $isPublic: Boolean = true
+  $tags: [String!]
+) @auth(level: USER) {
+  event_insert(data: {
+    title: $title
+    description: $description
+    shortDescription: $shortDescription
+    date: $date
+    time: $time
+    endTime: $endTime
+    location: $location
+    venue: $venue
+    imageUrl: $imageUrl
+    categoryId: $categoryId
+    categoryName: $categoryName
+    organizerId: $organizerId
+    organizerName: $organizerName
+    capacity: $capacity
+    registeredCount: 0
+    waitlistCount: 0
+    price: $price
+    isFree: $isFree
+    currency: $currency
+    status: $status
+    featured: $featured
+    requiresApproval: $requiresApproval
+    isPublic: $isPublic
+    tags: $tags
+    averageRating: 0
+    totalReviews: 0
+    isDeleted: false
+  })
+}
+
+"""
+Update event details
+"""
+mutation UpdateEvent(
+  $id: UUID!
+  $title: String
+  $description: String
+  $shortDescription: String
+  $date: Date
+  $time: String
+  $endTime: String
+  $location: String
+  $venue: String
+  $imageUrl: String
+  $categoryId: UUID
+  $categoryName: String
+  $capacity: Int
+  $price: Float
+  $isFree: Boolean
+  $featured: Boolean
+  $requiresApproval: Boolean
+  $isPublic: Boolean
+  $tags: [String!]
+) @auth(level: USER) {
+  event_update(id: $id, data: {
+    title: $title
+    description: $description
+    shortDescription: $shortDescription
+    date: $date
+    time: $time
+    endTime: $endTime
+    location: $location
+    venue: $venue
+    imageUrl: $imageUrl
+    categoryId: $categoryId
+    categoryName: $categoryName
+    capacity: $capacity
+    price: $price
+    isFree: $isFree
+    featured: $featured
+    requiresApproval: $requiresApproval
+    isPublic: $isPublic
+    tags: $tags
+  })
+}
+
+"""
+Update event status (publish, cancel, complete)
+"""
+mutation UpdateEventStatus(
+  $id: UUID!
+  $status: String!
+) @auth(level: USER) {
+  event_update(id: $id, data: {
+    status: $status
+    publishedAt: { expr: "request.time" }
+  })
+}
+
+"""
+Increment event registration count
+"""
+mutation IncrementEventRegistration($id: UUID!) @auth(level: USER) {
+  event_update(id: $id, data: {
+    registeredCount: { expr: "registeredCount + 1" }
+  })
+}
+
+"""
+Decrement event registration count
+"""
+mutation DecrementEventRegistration($id: UUID!) @auth(level: USER) {
+  event_update(id: $id, data: {
+    registeredCount: { expr: "registeredCount - 1" }
+  })
+}
+
+"""
+Update event rating aggregates
+"""
+mutation UpdateEventRating(
+  $id: UUID!
+  $averageRating: Float!
+  $totalReviews: Int!
+) @auth(level: USER) {
+  event_update(id: $id, data: {
+    averageRating: $averageRating
+    totalReviews: $totalReviews
+  })
+}
+
+"""
+Soft delete event
+"""
+mutation DeleteEvent($id: UUID!) @auth(level: USER) {
+  event_update(id: $id, data: {
+    isDeleted: true
+    deletedAt: { expr: "request.time" }
+  })
+}
+
+"""
+Hard delete event (super admin only)
+"""
+mutation HardDeleteEvent($id: UUID!) @auth(level: USER) {
+  event_delete(id: $id)
+}
+
+# ============================================================================
+# BOOKING MUTATIONS
+# ============================================================================
+
+"""
+Create a new booking
+"""
+mutation CreateBooking(
+  $userId: UUID!
+  $eventId: UUID!
+  $ticketId: String!
+  $qrCode: String
+  $status: String! = "confirmed"
+  $isWaitlist: Boolean = false
+  $waitlistPosition: Int
+  $numberOfTickets: Int = 1
+  $totalAmount: Float = 0
+  $paymentStatus: String = "not_required"
+  # Denormalized fields
+  $eventTitle: String
+  $eventDate: Date
+  $eventTime: String
+  $eventVenue: String
+  $eventImageUrl: String
+  $userName: String
+  $userEmail: String
+) @auth(level: USER) {
+  booking_insert(data: {
+    userId: $userId
+    eventId: $eventId
+    ticketId: $ticketId
+    qrCode: $qrCode
+    status: $status
+    isWaitlist: $isWaitlist
+    waitlistPosition: $waitlistPosition
+    numberOfTickets: $numberOfTickets
+    totalAmount: $totalAmount
+    paymentStatus: $paymentStatus
+    eventTitle: $eventTitle
+    eventDate: $eventDate
+    eventTime: $eventTime
+    eventVenue: $eventVenue
+    eventImageUrl: $eventImageUrl
+    userName: $userName
+    userEmail: $userEmail
+    isDeleted: false
+  })
+}
+
+"""
+Update booking status
+"""
+mutation UpdateBookingStatus(
+  $id: UUID!
+  $status: String!
+) @auth(level: USER) {
+  booking_update(id: $id, data: {
+    status: $status
+  })
+}
+
+"""
+Check in a participant
+"""
+mutation CheckInParticipant(
+  $id: UUID!
+  $checkedInBy: UUID!
+  $checkInMethod: String = "qr_scan"
+) @auth(level: USER) {
+  booking_update(id: $id, data: {
+    status: "checked_in"
+    checkInTime: { expr: "request.time" }
+    checkedInBy: $checkedInBy
+    checkInMethod: $checkInMethod
+  })
+}
+
+"""
+Cancel a booking
+"""
+mutation CancelBooking(
+  $id: UUID!
+  $cancelReason: String
+) @auth(level: USER) {
+  booking_update(id: $id, data: {
+    status: "cancelled"
+    cancelledAt: { expr: "request.time" }
+    cancelReason: $cancelReason
+  })
+}
+
+"""
+Update payment status
+"""
+mutation UpdateBookingPayment(
+  $id: UUID!
+  $paymentStatus: String!
+  $paymentId: String
+) @auth(level: USER) {
+  booking_update(id: $id, data: {
+    paymentStatus: $paymentStatus
+    paymentId: $paymentId
+  })
+}
+
+"""
+Promote from waitlist
+"""
+mutation PromoteFromWaitlist($id: UUID!) @auth(level: USER) {
+  booking_update(id: $id, data: {
+    status: "confirmed"
+    isWaitlist: false
+    waitlistPosition: null
+  })
+}
+
+"""
+Soft delete booking
+"""
+mutation DeleteBooking($id: UUID!) @auth(level: USER) {
+  booking_update(id: $id, data: {
+    isDeleted: true
+    deletedAt: { expr: "request.time" }
+  })
+}
+
+# ============================================================================
+# FAVORITE MUTATIONS
+# ============================================================================
+
+"""
+Add event to favorites
+"""
+mutation AddFavorite(
+  $userId: UUID!
+  $eventId: UUID!
+) @auth(level: USER) {
+  favoriteEvent_insert(data: {
+    userId: $userId
+    eventId: $eventId
+  })
+}
+
+"""
+Remove event from favorites
+"""
+mutation RemoveFavorite($id: UUID!) @auth(level: USER) {
+  favoriteEvent_delete(id: $id)
+}
+
+"""
+Remove favorite by user and event IDs
+"""
+mutation RemoveFavoriteByUserEvent(
+  $userId: UUID!
+  $eventId: UUID!
+) @auth(level: USER) {
+  favoriteEvent_deleteMany(
+    where: {
+      userId: { eq: $userId }
+      eventId: { eq: $eventId }
+    }
+  )
+}
+
+# ============================================================================
+# NOTIFICATION MUTATIONS
+# ============================================================================
+
+"""
+Create a notification
+"""
+mutation CreateNotification(
+  $userId: UUID!
+  $title: String!
+  $message: String!
+  $type: String!
+  $eventId: UUID
+  $bookingId: UUID
+  $actionUrl: String
+  $expiresAt: Timestamp
+) @auth(level: USER) {
+  notification_insert(data: {
+    userId: $userId
+    title: $title
+    message: $message
+    type: $type
+    eventId: $eventId
+    bookingId: $bookingId
+    actionUrl: $actionUrl
+    read: false
+    expiresAt: $expiresAt
+  })
+}
+
+"""
+Mark notification as read
+"""
+mutation MarkNotificationRead($id: UUID!) @auth(level: USER) {
+  notification_update(id: $id, data: {
+    read: true
+    readAt: { expr: "request.time" }
+  })
+}
+
+"""
+Mark all user notifications as read
+"""
+mutation MarkAllNotificationsRead($userId: UUID!) @auth(level: USER) {
+  notification_updateMany(
+    where: {
+      userId: { eq: $userId }
+      read: { eq: false }
+    },
+    data: {
+      read: true
+      readAt: { expr: "request.time" }
+    }
+  )
+}
+
+"""
+Delete notification
+"""
+mutation DeleteNotification($id: UUID!) @auth(level: USER) {
+  notification_delete(id: $id)
+}
+
+# ============================================================================
+# REVIEW MUTATIONS
+# ============================================================================
+
+"""
+Create a review
+"""
+mutation CreateReview(
+  $userId: UUID!
+  $eventId: UUID!
+  $rating: Int!
+  $comment: String
+  $isAnonymous: Boolean = false
+  $userName: String
+  $userAvatarUrl: String
+) @auth(level: USER) {
+  review_insert(data: {
+    userId: $userId
+    eventId: $eventId
+    rating: $rating
+    comment: $comment
+    isAnonymous: $isAnonymous
+    userName: $userName
+    userAvatarUrl: $userAvatarUrl
+    isFlagged: false
+    isApproved: true
+    isDeleted: false
+  })
+}
+
+"""
+Update a review
+"""
+mutation UpdateReview(
+  $id: UUID!
+  $rating: Int
+  $comment: String
+) @auth(level: USER) {
+  review_update(id: $id, data: {
+    rating: $rating
+    comment: $comment
+  })
+}
+
+"""
+Flag a review for moderation
+"""
+mutation FlagReview(
+  $id: UUID!
+  $flagReason: String!
+  $flaggedBy: UUID!
+) @auth(level: USER) {
+  review_update(id: $id, data: {
+    isFlagged: true
+    flagReason: $flagReason
+    flaggedBy: $flaggedBy
+    flaggedAt: { expr: "request.time" }
+    isApproved: false
+  })
+}
+
+"""
+Approve a flagged review
+"""
+mutation ApproveReview($id: UUID!) @auth(level: USER) {
+  review_update(id: $id, data: {
+    isFlagged: false
+    isApproved: true
+    flagReason: null
+    flaggedBy: null
+    flaggedAt: null
+  })
+}
+
+"""
+Soft delete a review
+"""
+mutation DeleteReview($id: UUID!) @auth(level: USER) {
+  review_update(id: $id, data: {
+    isDeleted: true
+    deletedAt: { expr: "request.time" }
+  })
+}
+
+# ============================================================================
+# CHECK-IN LOG MUTATIONS
+# ============================================================================
+
+"""
+Create a check-in log entry (audit trail)
+"""
+mutation CreateCheckInLog(
+  $bookingId: UUID!
+  $eventId: UUID!
+  $userId: UUID!
+  $checkedInBy: UUID!
+  $method: String = "qr_scan"
+  $deviceInfo: String
+  $ipAddress: String
+) @auth(level: USER) {
+  checkInLog_insert(data: {
+    bookingId: $bookingId
+    eventId: $eventId
+    userId: $userId
+    checkedInBy: $checkedInBy
+    method: $method
+    deviceInfo: $deviceInfo
+    ipAddress: $ipAddress
+  })
+}
+
+# ============================================================================
+# ANNOUNCEMENT MUTATIONS
+# ============================================================================
+
+"""
+Create an event announcement
+"""
+mutation CreateEventAnnouncement(
+  $eventId: UUID!
+  $title: String!
+  $message: String!
+  $priority: String = "normal"
+  $createdBy: UUID!
+  $sendPush: Boolean = true
+  $sendEmail: Boolean = false
+  $scheduledFor: Timestamp
+) @auth(level: USER) {
+  eventAnnouncement_insert(data: {
+    eventId: $eventId
+    title: $title
+    message: $message
+    priority: $priority
+    createdBy: $createdBy
+    sendPush: $sendPush
+    sendEmail: $sendEmail
+    scheduledFor: $scheduledFor
+  })
+}
+
+"""
+Delete announcement
+"""
+mutation DeleteEventAnnouncement($id: UUID!) @auth(level: USER) {
+  eventAnnouncement_delete(id: $id)
+}
+
+# ============================================================================
+# PAYMENT TRANSACTION MUTATIONS
+# ============================================================================
+
+"""
+Create a payment transaction record
+"""
+mutation CreatePaymentTransaction(
+  $bookingId: UUID!
+  $userId: UUID!
+  $eventId: UUID!
+  $amount: Float!
+  $currency: String = "INR"
+  $gateway: String = "razorpay"
+  $status: String!
+  $gatewayTransactionId: String
+  $gatewayOrderId: String
+  $gatewayResponse: String
+) @auth(level: USER) {
+  paymentTransaction_insert(data: {
+    bookingId: $bookingId
+    userId: $userId
+    eventId: $eventId
+    amount: $amount
+    currency: $currency
+    gateway: $gateway
+    status: $status
+    gatewayTransactionId: $gatewayTransactionId
+    gatewayOrderId: $gatewayOrderId
+    gatewayResponse: $gatewayResponse
+  })
+}
+
+"""
+Update payment transaction status
+"""
+mutation UpdatePaymentTransaction(
+  $id: UUID!
+  $status: String!
+  $gatewayTransactionId: String
+  $gatewayResponse: String
+  $completedAt: Timestamp
+) @auth(level: USER) {
+  paymentTransaction_update(id: $id, data: {
+    status: $status
+    gatewayTransactionId: $gatewayTransactionId
+    gatewayResponse: $gatewayResponse
+    completedAt: $completedAt
+  })
+}
+
+"""
+Process refund
+"""
+mutation ProcessRefund(
+  $id: UUID!
+  $refundAmount: Float!
+  $refundReason: String
+) @auth(level: USER) {
+  paymentTransaction_update(id: $id, data: {
+    status: "refunded"
+    refundAmount: $refundAmount
+    refundedAt: { expr: "request.time" }
+    refundReason: $refundReason
+  })
+}
+
+# ============================================================================
+# FILE UPLOAD MUTATIONS
+# ============================================================================
+
+"""
+Create file upload metadata record
+"""
+mutation CreateFileUpload(
+  $userId: UUID!
+  $type: String!
+  $filename: String!
+  $originalFilename: String!
+  $mimeType: String!
+  $size: Int!
+  $storagePath: String!
+  $downloadUrl: String
+  $relatedEntityType: String
+  $relatedEntityId: UUID
+) @auth(level: USER) {
+  fileUpload_insert(data: {
+    userId: $userId
+    type: $type
+    filename: $filename
+    originalFilename: $originalFilename
+    mimeType: $mimeType
+    size: $size
+    storagePath: $storagePath
+    downloadUrl: $downloadUrl
+    relatedEntityType: $relatedEntityType
+    relatedEntityId: $relatedEntityId
+    isProcessed: false
+    isDeleted: false
+  })
+}
+
+"""
+Mark file as processed
+"""
+mutation MarkFileProcessed(
+  $id: UUID!
+  $downloadUrl: String
+) @auth(level: USER) {
+  fileUpload_update(id: $id, data: {
+    isProcessed: true
+    downloadUrl: $downloadUrl
+  })
+}
+
+"""
+Soft delete file upload
+"""
+mutation DeleteFileUpload($id: UUID!) @auth(level: USER) {
+  fileUpload_update(id: $id, data: {
+    isDeleted: true
+    deletedAt: { expr: "request.time" }
+  })
+}

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { findBookingByTicketId, findBookingByQRCode, checkInParticipant, getUserById, getEventById, getEventParticipants, getParticipantDetails } from '../../services/backend';
+import { getParticipantDetails, findBookingByTicketId } from '../../services/backend';
 import { User, Booking, Event } from '../../types';
 import { useAuth } from '../../App';
+import { useCheckInParticipant, useEventParticipants } from '../../hooks';
 
 interface CheckedInData {
   booking: Booking;
@@ -39,6 +40,10 @@ export default function ScanTicket() {
 
   // Get eventId from location state if provided
   const eventId = (location.state as any)?.eventId;
+
+  // React Query hooks
+  const checkInMutation = useCheckInParticipant();
+  const { data: eventParticipants = [] } = useEventParticipants(eventId || 'e1');
 
   // Helper function to create detailed error
   const createTicketError = (
@@ -145,13 +150,12 @@ export default function ScanTicket() {
       // Simulate scanning delay
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Get a random confirmed booking to simulate a scan
-      const allBookings = await getEventParticipants(eventId || 'e1');
-      const confirmedBookings = allBookings.filter(b => b.status === 'confirmed');
+      // Use React Query cached data for participants
+      const confirmedBookings = eventParticipants.filter(b => b.status === 'confirmed');
       
       if (confirmedBookings.length === 0) {
         // If no pending check-ins, simulate an error scenario
-        const checkedInBookings = allBookings.filter(b => b.status === 'checked_in');
+        const checkedInBookings = eventParticipants.filter(b => b.status === 'checked_in');
         if (checkedInBookings.length > 0) {
           // Show already checked in error
           const randomCheckedIn = checkedInBookings[Math.floor(Math.random() * checkedInBookings.length)];
@@ -261,7 +265,11 @@ export default function ScanTicket() {
       }
       
       // Perform check-in with required parameters (bookingId, staffUserId, method)
-      await checkInParticipant(sanitizedBookingId, currentUser.id, 'qr_scan');
+      await checkInMutation.mutateAsync({
+        bookingId: sanitizedBookingId,
+        checkedInBy: currentUser.id,
+        method: 'qr_scan'
+      });
       
       // Update booking status locally for display
       const checkedInBooking: Booking = {
