@@ -8,6 +8,9 @@ import { QueryProvider } from './providers/QueryProvider';
 // Firebase Auth Service
 import { onAuthStateChanged as subscribeToAuth, signIn, signUp, signOut, AuthResult } from './services/authService';
 
+// Auth Components
+import { PasswordResetPage } from './components/auth/PasswordManagement';
+
 // Icons
 import { 
   Home, Calendar, User as UserIcon, LogOut, 
@@ -21,6 +24,9 @@ import {
 
 // Auth - loaded immediately (critical path)
 import LoginScreen from './pages/Auth';
+
+// Auth pages - lazy loaded
+const EmailVerificationPage = lazy(() => import('./components/auth/EmailVerification').then(m => ({ default: m.EmailVerificationPage })));
 
 // Student pages - lazy loaded
 const StudentHome = lazy(() => import('./pages/student/Home'));
@@ -320,6 +326,8 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
   // Check if current page needs full-screen layout (no navbar/footer/padding)
   const isFullScreenPage = !user || 
     location.pathname === '/login' || 
+    location.pathname === '/reset-password' ||
+    location.pathname === '/verify-email' ||
     location.pathname === '/student/profile' ||
     location.pathname === '/student/profile/edit' ||
     location.pathname === '/student/home' ||
@@ -349,6 +357,8 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
             <Routes>
               {/* Public Routes */}
               <Route path="/login" element={!user ? <LoginScreen /> : <Navigate to={user.role === 'admin' ? "/admin/dashboard" : "/student/home"} />} />
+              <Route path="/reset-password" element={<PasswordResetPage />} />
+              <Route path="/verify-email" element={user ? <EmailVerificationPage /> : <Navigate to="/login" />} />
               
               {/* Student Routes */}
               <Route path="/student/*" element={user && user.role === 'student' ? (

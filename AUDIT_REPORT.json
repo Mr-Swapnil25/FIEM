@@ -1,0 +1,441 @@
+{
+  "audit_metadata": {
+    "date": "2026-01-16",
+    "version": "1.0.0",
+    "auditor": "Copilot Elite Auditor",
+    "repository": "EventEase"
+  },
+  "summary": {
+    "total_files": 83,
+    "total_lines_approx": 35000,
+    "total_size_kb": 946.83,
+    "tech_stack": [
+      "React 18",
+      "TypeScript",
+      "Vite",
+      "Firebase Auth",
+      "Firebase Data Connect (Cloud SQL PostgreSQL)",
+      "Cloud Firestore (Fallback)",
+      "Firebase Storage",
+      "Firebase Cloud Functions",
+      "React Query (TanStack Query)",
+      "React Router DOM",
+      "Tailwind CSS"
+    ],
+    "entry_points": [
+      "index.html",
+      "index.tsx",
+      "App.tsx"
+    ],
+    "critical_issues": 6,
+    "high_issues": 8,
+    "medium_issues": 12,
+    "low_issues": 15
+  },
+  "file_tree": "eventease/\n├── App.tsx\n├── index.html\n├── index.tsx\n├── types.ts (DUPLICATE - DELETE)\n├── vite.config.ts\n├── tsconfig.json\n├── package.json\n├── firebase.json\n├── firestore.rules\n├── storage.rules\n├── components/\n│   ├── auth/\n│   │   ├── index.ts\n│   │   ├── EmailVerification.tsx\n│   │   ├── PasswordManagement.tsx\n│   │   └── ProtectedRoute.tsx\n│   ├── FileUpload.tsx\n│   ├── LiveIndicator.tsx\n│   ├── ReviewForm.tsx\n│   ├── ReviewsList.tsx\n│   └── StarRating.tsx\n├── dataconnect/\n│   ├── connector/\n│   │   ├── mutations.gql\n│   │   ├── mutations.production.gql\n│   │   ├── queries.gql\n│   │   └── queries.production.gql\n│   └── schema/\n│       ├── schema.gql\n│       └── schema.production.gql\n├── docs/\n├── functions/\n│   └── src/\n│       └── index.ts\n├── hooks/\n│   ├── index.ts\n│   ├── useAuth.ts\n│   ├── useFavorites.ts\n│   ├── useFirebaseData.ts\n│   ├── useProfileUpdate.ts\n│   ├── useRealtime.ts\n│   └── useReviews.ts\n├── pages/\n│   ├── Auth.tsx\n│   ├── admin/\n│   │   ├── CreateEditEvent.tsx\n│   │   ├── Dashboard.tsx\n│   │   ├── EventPublishSuccess.tsx\n│   │   ├── Events.tsx\n│   │   ├── ParticipantDetails.tsx\n│   │   ├── Profile.tsx\n│   │   ├── Reports.tsx\n│   │   ├── ReviewModeration.tsx\n│   │   └── ScanTicket.tsx\n│   ├── shared/\n│   │   └── ProfileEdit.tsx\n│   └── student/\n│       ├── BookingConfirmation.tsx\n│       ├── EventDetails.tsx\n│       ├── FavoritesList.tsx\n│       ├── Home.tsx\n│       ├── MyEvents.tsx\n│       └── Profile.tsx\n├── providers/\n│   └── QueryProvider.tsx\n├── public/\n│   ├── error-pages/\n│   ├── icons/\n│   ├── manifest.json\n│   ├── offline.html\n│   └── service-worker.js\n├── scripts/\n├── services/\n│   ├── authService.ts\n│   ├── backend.ts\n│   ├── dataConnectService.ts\n│   ├── envValidator.ts\n│   ├── errorHandler.ts\n│   ├── exportReports.ts\n│   ├── firebase.ts\n│   ├── firestoreService.ts\n│   ├── hybridService.ts\n│   ├── mockBackend.ts (DEAD CODE - DELETE)\n│   ├── qrCodeService.ts\n│   ├── rateLimitClient.ts (DEAD CODE - DELETE)\n│   └── storageService.ts\n└── types/\n    └── index.ts",
+  "dead_code_files": [
+    {
+      "file": "services/mockBackend.ts",
+      "lines": 386,
+      "reason": "Entire file unused - no imports found. Uses localStorage which violates project policy.",
+      "action": "DELETE"
+    },
+    {
+      "file": "services/rateLimitClient.ts",
+      "lines": 246,
+      "reason": "Entire file unused - no imports found in codebase",
+      "action": "DELETE"
+    },
+    {
+      "file": "types.ts",
+      "lines": 127,
+      "reason": "Duplicate of types/index.ts with less complete definitions",
+      "action": "DELETE and update imports to types/index.ts"
+    },
+    {
+      "file": "dataconnect/schema/schema.gql",
+      "lines": 127,
+      "reason": "Duplicate of schema.production.gql - production is enhanced superset",
+      "action": "DELETE"
+    },
+    {
+      "file": "dataconnect/connector/queries.gql",
+      "lines": 236,
+      "reason": "Duplicate of queries.production.gql - production has more queries and proper types",
+      "action": "DELETE"
+    },
+    {
+      "file": "dataconnect/connector/mutations.gql",
+      "lines": 298,
+      "reason": "Duplicate of mutations.production.gql - production has 28 more mutations",
+      "action": "DELETE"
+    }
+  ],
+  "duplicates": [
+    {
+      "type": "functional",
+      "name": "formatDate utility",
+      "similarity": "95%",
+      "locations": [
+        "pages/admin/Dashboard.tsx:49-54",
+        "pages/admin/Events.tsx:53-60",
+        "pages/admin/Reports.tsx:35-45",
+        "pages/admin/ParticipantDetails.tsx:109-115",
+        "pages/admin/ScanTicket.tsx:59-66",
+        "pages/student/BookingConfirmation.tsx:27-34",
+        "pages/student/EventDetails.tsx:103-108",
+        "pages/student/Home.tsx:52-58",
+        "pages/student/MyEvents.tsx:68-73",
+        "pages/student/Profile.tsx:43-49",
+        "components/ReviewsList.tsx:25-31"
+      ],
+      "action": "MERGE",
+      "new_file": "utils/formatters.ts",
+      "lines_saved": 150
+    },
+    {
+      "type": "functional",
+      "name": "formatTime utility",
+      "similarity": "95%",
+      "locations": [
+        "pages/admin/ParticipantDetails.tsx:117-123",
+        "pages/admin/ScanTicket.tsx:36-40",
+        "pages/student/EventDetails.tsx:110-116",
+        "pages/student/MyEvents.tsx:60-63",
+        "pages/student/Home.tsx:75-79",
+        "pages/student/BookingConfirmation.tsx:33-37",
+        "pages/student/Profile.tsx:51-55"
+      ],
+      "action": "MERGE",
+      "new_file": "utils/formatters.ts",
+      "lines_saved": 70
+    },
+    {
+      "type": "component",
+      "name": "Bottom Navigation (Admin)",
+      "similarity": "90%",
+      "locations": [
+        "pages/admin/Dashboard.tsx:208-255",
+        "pages/admin/Events.tsx:233-282",
+        "pages/admin/Reports.tsx:310-365",
+        "pages/admin/Profile.tsx:187-223",
+        "pages/admin/ReviewModeration.tsx:252-300"
+      ],
+      "action": "MERGE",
+      "new_file": "components/navigation/AdminBottomNav.tsx",
+      "lines_saved": 200
+    },
+    {
+      "type": "component",
+      "name": "Bottom Navigation (Student)",
+      "similarity": "90%",
+      "locations": [
+        "pages/student/Home.tsx:461-504",
+        "pages/student/MyEvents.tsx:155-197"
+      ],
+      "action": "MERGE",
+      "new_file": "components/navigation/StudentBottomNav.tsx",
+      "lines_saved": 40
+    },
+    {
+      "type": "functional",
+      "name": "generateTicketId/generateQRCode",
+      "similarity": "100%",
+      "locations": [
+        "services/dataConnectService.ts:47-63",
+        "services/firebase.ts:175-191",
+        "services/firestoreService.ts:255-271"
+      ],
+      "action": "MERGE",
+      "new_file": "Keep in firebase.ts only, import elsewhere",
+      "lines_saved": 30
+    },
+    {
+      "type": "hooks",
+      "name": "Favorites system duplication",
+      "similarity": "80%",
+      "locations": [
+        "hooks/useFavorites.ts (complete file)",
+        "hooks/useFirebaseData.ts:useUserFavorites, useFavoriteStatus, useAddFavorite, useRemoveFavorite"
+      ],
+      "action": "MERGE",
+      "recommendation": "Keep React Query version in useFirebaseData.ts, DELETE useFavorites.ts",
+      "lines_saved": 183
+    },
+    {
+      "type": "hooks",
+      "name": "Reviews hooks duplication",
+      "similarity": "70%",
+      "locations": [
+        "hooks/useReviews.ts:useReviews",
+        "hooks/useFirebaseData.ts:useEventReviews"
+      ],
+      "action": "MERGE",
+      "recommendation": "Consolidate to single useReviews hook"
+    },
+    {
+      "type": "types",
+      "name": "Type definitions",
+      "similarity": "100%",
+      "locations": [
+        "types.ts (root)",
+        "types/index.ts"
+      ],
+      "action": "DELETE types.ts",
+      "recommendation": "Use types/index.ts exclusively"
+    }
+  ],
+  "cleanups": {
+    "comments_removed_estimate": {
+      "decorative_section_headers": 65,
+      "redundant_jsdoc": 20,
+      "security_comments_inline": 15,
+      "total_lines": 100
+    },
+    "dead_code": {
+      "services/mockBackend.ts": "ENTIRE FILE (386 lines)",
+      "services/rateLimitClient.ts": "ENTIRE FILE (246 lines)",
+      "types.ts": "ENTIRE FILE (127 lines)",
+      "hooks/useFavorites.ts:useFavoriteEvents": "Function never used",
+      "components/auth/EmailVerification.tsx:VerificationBanner": "Component never used",
+      "components/auth/EmailVerification.tsx:VerificationBadge": "Component never used",
+      "components/auth/PasswordManagement.tsx:ChangePasswordForm": "Component never used",
+      "components/auth/PasswordManagement.tsx:ResetPasswordForm": "Component never used",
+      "components/FileUpload.tsx:AvatarUpload": "Component never used",
+      "components/FileUpload.tsx:EventImageUpload": "Component never used",
+      "components/FileUpload.tsx:IdCardUpload": "Component never used",
+      "components/LiveIndicator.tsx:OfflineBanner": "Component never used",
+      "App.tsx:DefaultLoadingFallback": "Component never used (LoadingSpinner used instead)"
+    },
+    "unused_imports": {
+      "App.tsx": ["ChevronLeft", "User from lucide-react"]
+    }
+  },
+  "flows": {
+    "auth": [
+      "1. Frontend: Auth.tsx submit → authService.signUp()",
+      "2. authService.signUp() validates email domain (@teamfuture.in)",
+      "3. Firebase Auth createUserWithEmailAndPassword()",
+      "4. Create user profile in Cloud SQL via DataConnect CreateUser mutation",
+      "5. Fallback: Create in Firestore if DataConnect fails",
+      "6. Return AuthResult with user object",
+      "7. App.tsx onAuthStateChanged listener updates context",
+      "8. ProtectedRoute checks user.role for route access",
+      "9. Logout: signOut() clears Firebase auth + React Query cache"
+    ],
+    "api_contract": {
+      "user_operations": "getUserById, getUserByEmail, createUser, updateUser",
+      "event_operations": "listEvents, getEventById, createEvent, updateEvent, deleteEvent",
+      "booking_operations": "createBooking, getBookingById, listUserBookings, cancelBooking, checkInParticipant",
+      "favorites_operations": "getUserFavorites, addFavorite, removeFavorite",
+      "orphan_endpoints": ["ListUsers", "CreateEventAnnouncement", "CreatePaymentTransaction", "ListEventCheckIns"]
+    },
+    "database": {
+      "primary": "Firebase Data Connect (Cloud SQL PostgreSQL)",
+      "fallback": "Cloud Firestore",
+      "pattern": "Try DataConnect → Fall back to Firestore on error",
+      "connection_pooling": "Managed by Firebase SDK"
+    }
+  },
+  "issues": [
+    {
+      "id": "SEC-001",
+      "severity": "critical",
+      "type": "hardcoded_secret",
+      "file": ".env.example",
+      "line": "14-20",
+      "details": "Real Firebase API keys exposed in .env.example. Should be placeholders.",
+      "fix": "Replace with placeholder values like VITE_FIREBASE_API_KEY=your-api-key-here"
+    },
+    {
+      "id": "SEC-002",
+      "severity": "critical",
+      "type": "cors_misconfiguration",
+      "file": "functions/src/index.ts",
+      "line": 156,
+      "details": "Access-Control-Allow-Origin: '*' allows any origin",
+      "fix": "Restrict to specific origins: ['https://future-project-148.web.app', 'https://*.teamfuture.in']"
+    },
+    {
+      "id": "SEC-003",
+      "severity": "critical",
+      "type": "xss_vulnerability",
+      "file": "public/error-pages/config-error.html",
+      "line": 206,
+      "details": "Uses innerHTML with unsanitized data from localStorage",
+      "fix": "Use textContent instead of innerHTML"
+    },
+    {
+      "id": "SEC-004",
+      "severity": "high",
+      "type": "bypass_risk",
+      "file": "services/authService.ts",
+      "line": "221-232",
+      "details": "Client-side rate limiting stored in Map - easily bypassed by page refresh",
+      "fix": "Rely on server-side rate limiting in Cloud Functions only"
+    },
+    {
+      "id": "SEC-005",
+      "severity": "high",
+      "type": "authentication_bypass",
+      "file": "services/authService.ts",
+      "line": "432-434",
+      "details": "Apple Private Relay emails bypass domain validation",
+      "fix": "Sign out user and return error for private relay emails"
+    },
+    {
+      "id": "SEC-006",
+      "severity": "high",
+      "type": "broken_access_control",
+      "file": "storage.rules",
+      "line": 24,
+      "details": "Any authenticated user can write to events/ storage path, not just admins",
+      "fix": "Add role check: request.auth.token.role == 'admin'"
+    },
+    {
+      "id": "SEC-007",
+      "severity": "high",
+      "type": "feature_disabled",
+      "file": "components/auth/ProtectedRoute.tsx",
+      "line": "84-86",
+      "details": "Email verification check is commented out",
+      "fix": "Uncomment and implement email verification requirement"
+    },
+    {
+      "id": "SEC-008",
+      "severity": "medium",
+      "type": "user_enumeration",
+      "file": "services/authService.ts",
+      "line": "305-311",
+      "details": "Different error messages for 'user not found' vs 'wrong password' enables enumeration",
+      "fix": "Use generic 'Invalid credentials' message for both cases"
+    },
+    {
+      "id": "SEC-009",
+      "severity": "medium",
+      "type": "weak_csp",
+      "file": "csp-config.json",
+      "line": "13-14",
+      "details": "CSP allows 'unsafe-inline' for scripts and styles",
+      "fix": "Refactor to use nonces or hashes, remove unsafe-inline"
+    },
+    {
+      "id": "DEP-001",
+      "severity": "high",
+      "type": "vulnerable_dependency",
+      "file": "package.json",
+      "details": "xlsx package has 2 high severity vulnerabilities: Prototype Pollution (GHSA-4r6h-8v6p-xvw6) and ReDoS (GHSA-5pgg-2g8v-p4x9)",
+      "fix": "Update xlsx to >= 0.20.2 or use alternative library like exceljs"
+    },
+    {
+      "id": "PERF-001",
+      "severity": "high",
+      "type": "n_plus_one_query",
+      "file": "services/backend.ts",
+      "line": "varies",
+      "details": "getUserFavoriteEvents fetches each event individually in a loop",
+      "fix": "Use batch query with 'in' operator or GraphQL JOIN"
+    },
+    {
+      "id": "PERF-002",
+      "severity": "high",
+      "type": "n_plus_one_query",
+      "file": "pages/admin/Dashboard.tsx",
+      "line": "varies",
+      "details": "getEventReviewStats loops through all events to get reviews",
+      "fix": "Create dedicated aggregation query"
+    },
+    {
+      "id": "PERF-003",
+      "severity": "medium",
+      "type": "missing_index",
+      "file": "firestore.indexes.json",
+      "details": "Missing composite indexes for favorites(userId, eventId) and bookings(userId, eventId, isDeleted)",
+      "fix": "Add composite indexes to firestore.indexes.json"
+    }
+  ],
+  "db_audit": {
+    "connections": [
+      {
+        "client": "Firebase Data Connect",
+        "backend": "Cloud SQL PostgreSQL",
+        "uses_env": true,
+        "pooling": "SDK managed",
+        "sanitization": "Parameterized queries via GraphQL"
+      },
+      {
+        "client": "Cloud Firestore",
+        "backend": "Firestore (NoSQL)",
+        "uses_env": true,
+        "pooling": "SDK managed",
+        "sanitization": "SDK handles"
+      }
+    ],
+    "schemas": {
+      "users": "id, email, displayName, role, department, year, phone, avatarUrl, isActive, isDeleted",
+      "events": "id, title, description, date, time, venue, price, totalSlots, bookedSlots, category, status, organizerId",
+      "bookings": "id, eventId, userId, ticketId, qrCode, status, paymentStatus, checkInTime",
+      "favorites": "id, userId, eventId, createdAt",
+      "reviews": "id, eventId, userId, rating, comment, createdAt"
+    }
+  },
+  "patches": {
+    "git_commands": [
+      "# Remove dead code files",
+      "git rm services/mockBackend.ts",
+      "git rm services/rateLimitClient.ts", 
+      "git rm types.ts",
+      "",
+      "# After creating utils/formatters.ts, apply import updates",
+      "# Each page file needs: import { formatDate, formatTime } from '../utils/formatters'",
+      "",
+      "# After creating navigation components:",
+      "git add components/navigation/AdminBottomNav.tsx",
+      "git add components/navigation/StudentBottomNav.tsx"
+    ],
+    "files_to_create": [
+      {
+        "path": "utils/formatters.ts",
+        "description": "Consolidated date/time formatting utilities",
+        "exports": ["formatDate", "formatTime", "formatEventDate", "formatPrice", "getStatusColor", "getCategoryColor"]
+      },
+      {
+        "path": "components/navigation/AdminBottomNav.tsx",
+        "description": "Reusable admin bottom navigation component"
+      },
+      {
+        "path": "components/navigation/StudentBottomNav.tsx",
+        "description": "Reusable student bottom navigation component"
+      }
+    ],
+    "import_updates": {
+      "types.ts_deletion": [
+        "App.tsx: Change 'import { User } from './types'' to 'import type { User } from './types/index''"
+      ]
+    }
+  },
+  "next_steps": [
+    "1. CRITICAL: Sanitize .env.example - replace real API keys with placeholders",
+    "2. CRITICAL: Fix CORS in functions/src/index.ts - restrict allowed origins",
+    "3. CRITICAL: Fix innerHTML XSS in public/error-pages/config-error.html",
+    "4. HIGH: Update xlsx package to >= 0.20.2 or replace with exceljs",
+    "5. HIGH: Delete dead code files: mockBackend.ts, rateLimitClient.ts, types.ts",
+    "6. HIGH: Fix storage.rules to require admin role for event image writes",
+    "7. HIGH: Uncomment email verification in ProtectedRoute.tsx",
+    "8. MEDIUM: Create utils/formatters.ts and update all page imports (~500 lines saved)",
+    "9. MEDIUM: Extract AdminBottomNav and StudentBottomNav components (~240 lines saved)",
+    "10. MEDIUM: Add missing Firestore composite indexes",
+    "11. MEDIUM: Fix N+1 query in getUserFavoriteEvents",
+    "12. LOW: Remove decorative comments (~100 lines)",
+    "13. LOW: Unify auth error messages to prevent user enumeration",
+    "14. Run: npm audit fix --force (after xlsx update)",
+    "15. Run: npm test (if tests exist)",
+    "16. Rerun audit after changes to verify improvements"
+  ],
+  "metrics": {
+    "lines_to_delete": 1420,
+    "lines_to_consolidate": 660,
+    "total_potential_savings": 2080,
+    "percentage_reduction": "6%"
+  }
+}

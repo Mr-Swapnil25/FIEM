@@ -1,0 +1,250 @@
+{
+  "audit_date": "2026-01-16",
+  "scope": "dataconnect/**/*.gql",
+  "summary": {
+    "total_files": 6,
+    "total_lines": 3104,
+    "internal_duplicates": 1701,
+    "cross_file_semantic_duplicates": 41,
+    "dev_only_operations": 2,
+    "production_only_operations": 52
+  },
+  "files_analyzed": [
+    {
+      "path": "dataconnect/schema/schema.gql",
+      "lines": 127,
+      "internal_duplicates": 50,
+      "type": "dev",
+      "status": "REDUNDANT - DELETE"
+    },
+    {
+      "path": "dataconnect/schema/schema.production.gql",
+      "lines": 652,
+      "internal_duplicates": 303,
+      "type": "production",
+      "status": "KEEP - CANONICAL"
+    },
+    {
+      "path": "dataconnect/connector/queries.gql",
+      "lines": 236,
+      "internal_duplicates": 143,
+      "type": "dev",
+      "status": "REDUNDANT - DELETE"
+    },
+    {
+      "path": "dataconnect/connector/queries.production.gql",
+      "lines": 952,
+      "internal_duplicates": 639,
+      "type": "production",
+      "status": "KEEP - CANONICAL"
+    },
+    {
+      "path": "dataconnect/connector/mutations.gql",
+      "lines": 298,
+      "internal_duplicates": 136,
+      "type": "dev",
+      "status": "REDUNDANT - DELETE"
+    },
+    {
+      "path": "dataconnect/connector/mutations.production.gql",
+      "lines": 839,
+      "internal_duplicates": 430,
+      "type": "production",
+      "status": "KEEP - CANONICAL"
+    }
+  ],
+  "duplicate_analysis": {
+    "schema": {
+      "duplicated_types": [
+        "User",
+        "Category", 
+        "Event",
+        "Booking",
+        "Review",
+        "Notification",
+        "FavoriteEvent",
+        "CheckInLog",
+        "EventAnnouncement",
+        "PaymentTransaction"
+      ],
+      "dev_only": [],
+      "production_only": [
+        "UserRole (enum)",
+        "EventStatus (enum)",
+        "BookingStatus (enum)",
+        "PaymentStatus (enum)",
+        "NotificationType (enum)",
+        "CheckInMethod (enum)",
+        "AnnouncementPriority (enum)",
+        "TransactionStatus (enum)",
+        "FileUpload (type)",
+        "FileType (enum)",
+        "DailyEventMetrics (type)"
+      ]
+    },
+    "queries": {
+      "duplicated_queries": [
+        "GetUserById",
+        "GetUserByEmail",
+        "ListUsers",
+        "ListCategories",
+        "GetEventById",
+        "ListEvents",
+        "ListEventsByOrganizer",
+        "GetBookingById",
+        "GetBookingByTicketId",
+        "ListUserFavorites/GetUserFavorites",
+        "ListEventReviews/GetEventReviews",
+        "ListUserNotifications/GetUserNotifications",
+        "ListEventCheckIns/GetEventCheckInLogs",
+        "ListEventAnnouncements/GetEventAnnouncements",
+        "ListUserBookings/GetUserBookings"
+      ],
+      "dev_only": [
+        "ListEventsByStatus"
+      ],
+      "production_only": [
+        "SearchUsers",
+        "GetCategoryById",
+        "ListPublishedEvents",
+        "SearchEvents",
+        "ListUpcomingEvents",
+        "ListFeaturedEvents",
+        "CheckExistingBooking",
+        "GetEventBookingStats",
+        "CheckIsFavorite",
+        "GetUnreadNotificationCount",
+        "GetUserReview",
+        "GetEventReviewStats",
+        "GetDashboardStats",
+        "GetRecentBookings"
+      ]
+    },
+    "mutations": {
+      "duplicated_mutations": [
+        "CreateUser",
+        "UpdateUser",
+        "CreateCategory",
+        "CreateEvent",
+        "UpdateEvent",
+        "DeleteEvent (different: hard vs soft delete)",
+        "CreateBooking",
+        "CancelBooking",
+        "CreateReview",
+        "CreateNotification",
+        "MarkNotificationRead",
+        "AddFavorite",
+        "RemoveFavorite",
+        "CreateCheckInLog",
+        "CreateEventAnnouncement",
+        "CreatePaymentTransaction"
+      ],
+      "dev_only": [
+        "UpdateBooking (generic version)"
+      ],
+      "production_only": [
+        "UpdateUserLastLogin",
+        "UpdateUserRole",
+        "DeleteUser",
+        "UpdateCategory",
+        "DeleteCategory",
+        "UpdateEventStatus",
+        "IncrementEventRegistration",
+        "DecrementEventRegistration",
+        "UpdateEventRating",
+        "HardDeleteEvent",
+        "UpdateBookingStatus",
+        "CheckInParticipant",
+        "UpdateBookingPayment",
+        "PromoteFromWaitlist",
+        "DeleteBooking",
+        "RemoveFavoriteByUserEvent",
+        "MarkAllNotificationsRead",
+        "DeleteNotification",
+        "UpdateReview",
+        "FlagReview",
+        "ApproveReview",
+        "DeleteReview",
+        "DeleteEventAnnouncement",
+        "UpdatePaymentTransaction",
+        "ProcessRefund",
+        "CreateFileUpload",
+        "MarkFileProcessed",
+        "DeleteFileUpload"
+      ]
+    }
+  },
+  "internal_duplicate_breakdown": {
+    "note": "Internal duplicates are mostly repeated field names and boilerplate patterns",
+    "common_patterns": [
+      "createdAt: Timestamp! @default(expr: \"request.time\")",
+      "updatedAt: Timestamp! @default(expr: \"request.time\")",
+      "isDeleted: Boolean! @default(value: false)",
+      "id",
+      "email",
+      "displayName",
+      "status",
+      "eventId",
+      "userId"
+    ],
+    "estimated_lines_savable_internal": 0,
+    "reason": "These are legitimate field definitions, not removable duplicates"
+  },
+  "recommendation": {
+    "strategy": "DELETE_DEV_FILES",
+    "rationale": [
+      "Production files are a complete superset of dev files",
+      "Production has proper UUID foreign keys with @ref",
+      "Production has type-safe enums instead of strings",
+      "Production has soft delete patterns",
+      "Production has performance indexes",
+      "Only 2 dev-only operations need migration",
+      "52 production-only operations critical for app"
+    ],
+    "actions": [
+      {
+        "step": 1,
+        "action": "Add ListEventsByStatus query to queries.production.gql",
+        "priority": "high"
+      },
+      {
+        "step": 2,
+        "action": "Delete schema/schema.gql",
+        "saves": "127 lines"
+      },
+      {
+        "step": 3,
+        "action": "Delete connector/queries.gql",
+        "saves": "236 lines"
+      },
+      {
+        "step": 4,
+        "action": "Delete connector/mutations.gql",
+        "saves": "298 lines"
+      },
+      {
+        "step": 5,
+        "action": "Rename production files (remove .production suffix)",
+        "optional": true
+      },
+      {
+        "step": 6,
+        "action": "Update dataConnectService.ts imports if needed",
+        "priority": "high"
+      }
+    ],
+    "total_lines_saved": 661,
+    "percentage_reduction": "21.3%"
+  },
+  "patches": {
+    "missing_query_to_add": {
+      "file": "dataconnect/connector/queries.production.gql",
+      "content": "\"\"\"\nList events by status (for admin filtering)\n\"\"\"\nquery ListEventsByStatus(\n  $status: String!\n  $limit: Int = 50\n  $offset: Int = 0\n) @auth(level: PUBLIC) {\n  events(\n    where: {\n      isDeleted: { eq: false },\n      status: { eq: $status }\n    },\n    limit: $limit,\n    offset: $offset,\n    orderBy: { date: ASC }\n  ) {\n    id\n    title\n    shortDescription\n    date\n    time\n    location\n    imageUrl\n    categoryName\n    capacity\n    registeredCount\n    price\n    isFree\n    featured\n  }\n}"
+    },
+    "delete_commands": [
+      "git rm dataconnect/schema/schema.gql",
+      "git rm dataconnect/connector/queries.gql",
+      "git rm dataconnect/connector/mutations.gql"
+    ]
+  }
+}
