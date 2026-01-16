@@ -12,6 +12,25 @@ dist
 dist-ssr
 *.local
 
+# ============================================
+# Environment Variables (CRITICAL SECURITY)
+# ============================================
+# NEVER commit .env files with real credentials!
+.env
+.env.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.staging
+.env.test
+
+# Keep example file tracked (has placeholders only)
+!.env.example
+
+# Backups
+.env-backups/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

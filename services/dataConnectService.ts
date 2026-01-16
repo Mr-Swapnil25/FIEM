@@ -36,8 +36,9 @@ export const getDataConnectInstance = (): DataConnect => {
     
     // Connect to emulator in development
     if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
-      connectDataConnectEmulator(dataConnect, 'localhost', 9399);
-      console.log('[DataConnect] Connected to emulator');
+      const dataConnectPort = parseInt(import.meta.env.VITE_EMULATOR_DATACONNECT_PORT || '9399');
+      connectDataConnectEmulator(dataConnect, 'localhost', dataConnectPort);
+      console.log(`[DataConnect] Connected to emulator on port ${dataConnectPort}`);
     }
   }
   return dataConnect;
@@ -216,6 +217,12 @@ async function executeFirestoreQuery<T>(queryName: string, variables?: Record<st
       const event = await firestoreService.getEventById(variables?.id as string);
       return { event: event || null } as T;
     }
+    case 'GetEventsByIds': {
+      // PERF-001: Batch query for multiple events
+      const eventIds = variables?.eventIds as string[];
+      const events = await firestoreService.getEventsByIds(eventIds || []);
+      return { events } as T;
+    }
     case 'GetEventsByOrganizer': {
       const events = await firestoreService.listEvents({ organizerId: variables?.organizerId as string });
       return { events } as T;
@@ -246,10 +253,11 @@ async function executeFirestoreQuery<T>(queryName: string, variables?: Record<st
       return { favorites } as T;
     }
     case 'GetUserFavoriteEvents': {
+      // PERF-001: Fixed N+1 query - now uses batch loading instead of individual fetches
       const favorites = await firestoreService.getUserFavorites(variables?.userId as string);
       const eventIds = favorites.map((f: { eventId: string }) => f.eventId);
-      const events = await Promise.all(eventIds.map((id: string) => firestoreService.getEventById(id)));
-      return { events: events.filter(e => e !== null) } as T;
+      const events = await firestoreService.getEventsByIds(eventIds);
+      return { events } as T;
     }
     case 'CheckIsFavorite': {
       const isFavorite = await firestoreService.checkIsFavorite(
@@ -659,6 +667,48 @@ export const getEventById = async (eventId: string): Promise<Event | null> => {
   } catch (error) {
     console.error('[DataConnect] Error getting event:', error);
     return null;
+  }
+};
+
+/**
+ * Get multiple events by IDs in a single batch
+ * PERF-001: Optimized batch loading to fix N+1 query pattern
+ * @param eventIds - Array of event IDs to fetch
+ * @returns Array of events (maintains order, filters nulls)
+ */
+export const getEventsByIds = async (eventIds: string[]): Promise<Event[]> => {
+  if (eventIds.length === 0) return [];
+  
+  try {
+    // For small batches, parallel individual queries are acceptable
+    // For larger batches, we use Firestore's batch query directly
+    if (eventIds.length <= 10) {
+      const eventPromises = eventIds.map(id => getEventById(id));
+      const events = await Promise.all(eventPromises);
+      return events.filter((e): e is Event => e !== null);
+    }
+    
+    // For larger batches, use Firestore batch query via executeQuery fallback
+    const result = await executeQuery<{ events: DataConnectEvent[] }>('GetEventsByIds', { 
+      eventIds 
+    });
+    
+    // If query exists, use it
+    if (result.events) {
+      const eventMap = new Map(result.events.map(e => [e.id, mapDataConnectEventToEvent(e)]));
+      return eventIds.map(id => eventMap.get(id)).filter((e): e is Event => e !== undefined);
+    }
+    
+    // Fallback to parallel queries
+    const eventPromises = eventIds.map(id => getEventById(id));
+    const events = await Promise.all(eventPromises);
+    return events.filter((e): e is Event => e !== null);
+  } catch (error) {
+    console.error('[DataConnect] Error getting events by IDs:', error);
+    // Fallback to parallel queries on error
+    const eventPromises = eventIds.map(id => getEventById(id));
+    const events = await Promise.all(eventPromises);
+    return events.filter((e): e is Event => e !== null);
   }
 };
 
@@ -1119,18 +1169,16 @@ export const removeFavorite = async (favoriteId: string): Promise<void> => {
 
 /**
  * Get user's favorite events with full event details
+ * PERF-001: Fixed N+1 query - uses batch loading
  */
 export const getUserFavoriteEvents = async (userId: string): Promise<Event[]> => {
   try {
     const favorites = await getUserFavorites(userId);
     if (favorites.length === 0) return [];
     
-    // Fetch event details for each favorite
-    const eventPromises = favorites.map(f => getEventById(f.eventId));
-    const events = await Promise.all(eventPromises);
-    
-    // Filter out any null events (deleted/invalid) and maintain favorite order
-    return events.filter((e): e is Event => e !== null);
+    // PERF-001: Use batch loading instead of individual fetches
+    const eventIds = favorites.map(f => f.eventId);
+    return await getEventsByIds(eventIds);
   } catch (error) {
     console.error('[DataConnect] Error getting favorite events:', error);
     return [];

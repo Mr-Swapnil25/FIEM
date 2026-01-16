@@ -122,8 +122,9 @@ if (typeof window !== 'undefined') {
 
 // Connect to emulators in development mode
 if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
-  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
-  console.log('[Firebase] Connected to Auth emulator');
+  const authPort = import.meta.env.VITE_EMULATOR_AUTH_PORT || '9099';
+  connectAuthEmulator(auth, `http://localhost:${authPort}`, { disableWarnings: true });
+  console.log(`[Firebase] Connected to Auth emulator on port ${authPort}`);
 }
 
 // Export Firebase instances
