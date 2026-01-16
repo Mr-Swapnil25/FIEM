@@ -13,11 +13,17 @@ service firebase.storage {
              && request.resource.size < 2 * 1024 * 1024; // Max 2MB for avatars
     }
     
-    // Event images - anyone can read, authenticated users can write valid images only
+    // SEC-006 FIX: Helper function to check admin role
+    // Note: This requires custom claims to be set via Firebase Admin SDK
+    function isAdmin() {
+      return request.auth != null && request.auth.token.role == 'admin';
+    }
+    
+    // Event images - anyone can read, only admins can write valid images
     match /events/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null && isValidImage();
-      allow delete: if request.auth != null;
+      allow write: if isAdmin() && isValidImage();
+      allow delete: if isAdmin();
     }
     
     // User avatars - anyone can read, owner can write valid avatars only

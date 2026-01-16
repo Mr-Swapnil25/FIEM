@@ -826,6 +826,8 @@ dist/
 - ✅ **Modern Targets**: ES2020 for smaller polyfills
 - ✅ **Image Optimization**: WebP with fallbacks
 - ✅ **Caching Headers**: Long-term asset caching
+- ✅ **Batch Queries**: N+1 query fix for favorites (PERF-001)
+- ✅ **Shared Utilities**: Consolidated date formatting (~10 duplicate functions removed)
 
 </details>
 

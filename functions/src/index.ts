@@ -18,6 +18,30 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // ============================================================================
+// CORS CONFIGURATION - SEC-002 FIX
+// ============================================================================
+
+const ALLOWED_ORIGINS = [
+  'https://future-project-148.web.app',
+  'https://eventease.teamfuture.in',
+  // Add localhost for development (remove in production if not needed)
+  'http://localhost:5173',
+  'http://localhost:3000'
+];
+
+/**
+ * Set CORS headers with origin validation
+ */
+function setCorsHeaders(request: functions.https.Request, response: functions.Response): void {
+  const origin = request.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    response.set('Access-Control-Allow-Origin', origin);
+  }
+  response.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+// ============================================================================
 // RATE LIMITING CONFIGURATION
 // ============================================================================
 
@@ -163,10 +187,8 @@ function getClientIdentifier(request: functions.https.Request, userId?: string):
  * Use this as a callable function or HTTP endpoint
  */
 export const rateLimitedAuth = functions.https.onRequest(async (request, response) => {
-  // CORS headers
-  response.set('Access-Control-Allow-Origin', '*');
-  response.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  response.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // CORS headers (SEC-002: Origin-validated)
+  setCorsHeaders(request, response);
   
   if (request.method === 'OPTIONS') {
     response.status(204).send('');
@@ -216,10 +238,8 @@ export const rateLimitedAuth = functions.https.onRequest(async (request, respons
  * Rate-limited booking endpoint
  */
 export const rateLimitedBooking = functions.https.onRequest(async (request, response) => {
-  // CORS headers
-  response.set('Access-Control-Allow-Origin', '*');
-  response.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  response.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // CORS headers (SEC-002: Origin-validated)
+  setCorsHeaders(request, response);
   
   if (request.method === 'OPTIONS') {
     response.status(204).send('');

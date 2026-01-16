@@ -8,6 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdminReviews } from '../../hooks/useReviews';
 import StarRating from '../../components/StarRating';
 import { Review } from '../../types';
+import { formatDateShort } from '../../utils/dateFormat';
 
 type FilterType = 'all' | 'flagged' | 'recent';
 
@@ -64,15 +65,8 @@ export default function ReviewModeration() {
     setActionLoading(null);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
+  // Using formatDateShort from shared utils
+  const formatDate = formatDateShort;
 
   return (
     <div className="relative min-h-screen bg-[#0B0E14] text-slate-200 font-display antialiased">

@@ -38,7 +38,8 @@ import {
   increment,
   arrayUnion,
   arrayRemove,
-  FieldValue
+  FieldValue,
+  documentId
 } from 'firebase/firestore';
 import { app } from './firebase';
 
@@ -389,6 +390,46 @@ export const getEventById = async (eventId: string): Promise<FirestoreEvent | nu
     return { id: docSnap.id, ...data } as FirestoreEvent;
   } catch (error) {
     console.error('[Firestore] getEventById failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get multiple events by IDs in a single batch query
+ * Optimized to avoid N+1 queries - uses Firestore 'in' operator (max 30 items per query)
+ * @param eventIds - Array of event IDs to fetch
+ * @returns Array of events (excludes deleted events and maintains order)
+ */
+export const getEventsByIds = async (eventIds: string[]): Promise<FirestoreEvent[]> => {
+  if (eventIds.length === 0) return [];
+  
+  try {
+    // Firestore 'in' operator supports max 30 items per query
+    const BATCH_SIZE = 30;
+    const batches: Promise<FirestoreEvent[]>[] = [];
+    
+    for (let i = 0; i < eventIds.length; i += BATCH_SIZE) {
+      const batchIds = eventIds.slice(i, i + BATCH_SIZE);
+      const batchPromise = (async () => {
+        const q = query(
+          collection(db, COLLECTIONS.EVENTS),
+          where(documentId(), 'in', batchIds),
+          where('isDeleted', '==', false)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirestoreEvent));
+      })();
+      batches.push(batchPromise);
+    }
+    
+    const results = await Promise.all(batches);
+    const allEvents = results.flat();
+    
+    // Maintain original order by eventIds
+    const eventMap = new Map(allEvents.map(e => [e.id, e]));
+    return eventIds.map(id => eventMap.get(id)).filter((e): e is FirestoreEvent => e !== undefined);
+  } catch (error) {
+    console.error('[Firestore] getEventsByIds failed:', error);
     throw error;
   }
 };

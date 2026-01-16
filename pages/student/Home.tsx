@@ -7,6 +7,7 @@ import { RatingBadge } from '../../components/StarRating';
 import { usePublishedEvents, useUserBookings } from '../../hooks';
 import { useRealtimeEvents } from '../../hooks/useRealtime';
 import { LiveIndicator } from '../../components/LiveIndicator';
+import { formatDate, formatTime } from '../../utils/dateFormat';
 
 export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) {
   const { user, logout } = useAuth();
@@ -74,17 +75,7 @@ export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) 
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const month = date.toLocaleString('default', { month: 'short' });
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${month} ${day}`;
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  };
+  // formatDate and formatTime imported from utils/dateFormat
 
   const getRandomAttendees = () => {
     const initials = ['JD', 'AS', 'MK', 'RJ', 'EM', 'TW', 'PL', 'NC'];

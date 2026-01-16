@@ -3,6 +3,7 @@ import { useAuth } from '../../App';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useUserBookings, useCancelBooking } from '../../hooks';
 import { useRealtimeUserBookings } from '../../hooks/useRealtime';
+import { formatDate, formatTime } from '../../utils/dateFormat';
 
 export default function MyEvents() {
   const { user } = useAuth();
@@ -23,17 +24,7 @@ export default function MyEvents() {
     return filter === 'upcoming' ? !isPast : isPast;
   }), [bookings, filter]);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const month = date.toLocaleString('default', { month: 'short' });
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${month} ${day}`;
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  };
+  // formatDate and formatTime imported from utils/dateFormat
 
   return (
     <div className="relative min-h-screen w-full flex flex-col pb-28 bg-backgroundLight dark:bg-background font-display text-slate-800 dark:text-slate-100 antialiased">

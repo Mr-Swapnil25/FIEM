@@ -1,127 +1,652 @@
-type User @table {
+# ========================================================================
+# EventEase Production Schema - Firebase Data Connect
+# Cloud SQL PostgreSQL via Data Connect
+# Designed for 100k+ users scalability
+# ========================================================================
+# 
+# NAMING CONVENTIONS:
+# - Types: PascalCase (User, Event, Booking)
+# - Fields: camelCase (createdAt, userId)
+# - Foreign keys: entityId format (userId, eventId)
+#
+# INDEXES: Defined via @index directive for query optimization
+# RELATIONSHIPS: Use @ref for foreign key relationships
+# SOFT DELETE: isDeleted + deletedAt fields on critical tables
+# ========================================================================
+
+# ============================================================================
+# USER MANAGEMENT
+# ============================================================================
+
+"""
+User profiles for students and administrators
+Linked to Firebase Auth via email (not UID - auto-generated UUIDs used)
+"""
+type User @table(name: "users") @index(fields: ["email"]) @index(fields: ["role"]) {
+  # Primary key - auto-generated UUID
   id: UUID! @default(expr: "uuidV4()")
+  
+  # Core identity (linked to Firebase Auth)
   email: String! @unique
-  displayName: String
-  role: String! @default(value: "student")
-  emailDomain: String
+  displayName: String!
+  
+  # Role-based access control
+  role: UserRole! @default(value: "STUDENT")
+  
+  # Institutional email parsing
+  emailDomain: String @index  # teamfuture.in
   firstName: String
   lastName: String
-  year: String
-  division: String
+  
+  # Student-specific fields
+  year: String        # 1st, 2nd, 3rd, 4th
+  division: String    # A, B, C, etc.
+  department: String  # Computer Science, etc.
+  rollNo: String      # Student roll number
+  
+  # Profile assets (Firebase Storage URLs)
+  avatarUrl: String
+  collegeIdUrl: String  # Uploaded ID card
+  
+  # Contact
+  phone: String
+  
+  # Soft delete
+  isDeleted: Boolean! @default(value: false)
+  deletedAt: Timestamp
+  
+  # Timestamps
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+  lastLoginAt: Timestamp
+  
+  # Relationships (reverse - defined by @ref in other tables)
+  # bookings: [Booking!]! @hasMany
+  # favorites: [FavoriteEvent!]! @hasMany
+  # notifications: [Notification!]! @hasMany
+  # reviews: [Review!]! @hasMany
+  # organizedEvents: [Event!]! @hasMany
+}
+
+"""
+User roles enumeration for RBAC
+"""
+enum UserRole {
+  STUDENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+# ============================================================================
+# EVENT CATEGORIES
+# ============================================================================
+
+"""
+Event categories for organization and filtering
+"""
+type Category @table(name: "categories") {
+  id: UUID! @default(expr: "uuidV4()")
+  
+  name: String! @unique
+  description: String
+  
+  # Display properties
+  icon: String      # Material icon name
+  color: String     # Hex color code
+  
+  # Status
+  isActive: Boolean! @default(value: true)
+  sortOrder: Int @default(value: 0)
+  
+  # Timestamps
   createdAt: Timestamp! @default(expr: "request.time")
   updatedAt: Timestamp! @default(expr: "request.time")
 }
 
-type Category @table {
-  id: UUID! @default(expr: "uuidV4()")
-  name: String!
-  description: String
-  icon: String
-  color: String
-  createdAt: Timestamp! @default(expr: "request.time")
-}
+# ============================================================================
+# EVENTS
+# ============================================================================
 
-type Event @table {
+"""
+Event listings - core business entity
+Supports published, draft, cancelled, completed states
+"""
+type Event @table(name: "events") 
+  @index(fields: ["status", "date"]) 
+  @index(fields: ["organizerId"]) 
+  @index(fields: ["categoryId"])
+  @index(fields: ["featured", "status"]) {
+  
   id: UUID! @default(expr: "uuidV4()")
+  
+  # Event details
   title: String!
   description: String!
-  shortDescription: String
-  date: Date!
-  time: String!
-  endTime: String
-  location: String!
-  venue: String
-  imageUrl: String
-  categoryId: String!
-  categoryName: String
-  organizerId: String!
-  organizerName: String
-  capacity: Int!
-  registeredCount: Int! @default(value: 0)
+  shortDescription: String  # For cards/previews (max 200 chars)
+  
+  # Date & time
+  date: Date!           # Event date
+  time: String!         # Start time (HH:mm)
+  endTime: String       # End time (HH:mm)
+  
+  # Location
+  location: String!     # Full address
+  venue: String         # Venue name within location
+  
+  # Media
+  imageUrl: String      # Cover photo (Firebase Storage)
+  
+  # Category relationship
+  categoryId: UUID! @ref(table: "categories", field: "id")
+  category: Category    # Resolved relationship
+  
+  # Organizer relationship
+  organizerId: UUID! @ref(table: "users", field: "id")
+  organizer: User       # Resolved relationship
+  
+  # Capacity management
+  capacity: Int!        # Total slots
+  registeredCount: Int! @default(value: 0)  # Current registrations
+  waitlistCount: Int! @default(value: 0)    # Waitlist count
+  
+  # Pricing
   price: Float! @default(value: 0)
   isFree: Boolean! @default(value: true)
-  status: String! @default(value: "draft")
+  currency: String @default(value: "INR")
+  
+  # Status
+  status: EventStatus! @default(value: "DRAFT")
+  
+  # Visibility & features
   featured: Boolean! @default(value: false)
   requiresApproval: Boolean! @default(value: false)
+  isPublic: Boolean! @default(value: true)
+  
+  # Tags for search
   tags: [String!]
+  
+  # Rating aggregates (denormalized for performance)
+  averageRating: Float @default(value: 0)
+  totalReviews: Int! @default(value: 0)
+  
+  # Soft delete
+  isDeleted: Boolean! @default(value: false)
+  deletedAt: Timestamp
+  
+  # Timestamps
   createdAt: Timestamp! @default(expr: "request.time")
   updatedAt: Timestamp! @default(expr: "request.time")
+  publishedAt: Timestamp
 }
 
-type Booking @table {
+"""
+Event status enumeration
+"""
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+# ============================================================================
+# BOOKINGS / REGISTRATIONS
+# ============================================================================
+
+"""
+Event registrations/bookings with ticket management
+Each booking generates a unique ticket with QR code
+"""
+type Booking @table(name: "bookings")
+  @index(fields: ["userId", "status"])
+  @index(fields: ["eventId", "status"])
+  @index(fields: ["ticketId"])
+  @index(fields: ["status", "createdAt"]) {
+  
   id: UUID! @default(expr: "uuidV4()")
-  eventId: String!
-  eventTitle: String!
-  userId: String!
-  userName: String!
-  userEmail: String!
-  status: String! @default(value: "confirmed")
-  ticketId: String! @unique
-  qrCode: String
-  checkInTime: Timestamp
+  
+  # Relationships
+  userId: UUID! @ref(table: "users", field: "id")
+  user: User
+  eventId: UUID! @ref(table: "events", field: "id")
+  event: Event
+  
+  # Ticket details
+  ticketId: String! @unique  # Format: EVT-{timestamp}-{random}
+  qrCode: String             # QR code data (JSON encoded)
+  
+  # Status
+  status: BookingStatus! @default(value: "CONFIRMED")
+  isWaitlist: Boolean! @default(value: false)
+  waitlistPosition: Int
+  
+  # Ticket quantity
   numberOfTickets: Int! @default(value: 1)
+  
+  # Payment
   totalAmount: Float! @default(value: 0)
-  paymentStatus: String! @default(value: "pending")
+  paymentStatus: PaymentStatus! @default(value: "NOT_REQUIRED")
   paymentId: String
+  
+  # Check-in tracking
+  checkInTime: Timestamp
+  checkedInBy: UUID @ref(table: "users", field: "id")
+  checkInMethod: String  # qr, manual, auto
+  
+  # Denormalized for performance (avoid joins in common queries)
+  eventTitle: String
+  eventDate: Date
+  eventTime: String
+  eventVenue: String
+  eventImageUrl: String
+  userName: String
+  userEmail: String
+  
+  # Soft delete
+  isDeleted: Boolean! @default(value: false)
+  deletedAt: Timestamp
+  cancelledAt: Timestamp
+  cancelReason: String
+  
+  # Timestamps
   createdAt: Timestamp! @default(expr: "request.time")
   updatedAt: Timestamp! @default(expr: "request.time")
 }
 
-type Review @table {
-  id: UUID! @default(expr: "uuidV4()")
-  eventId: String!
-  userId: String!
-  userName: String!
-  rating: Int!
-  comment: String
-  createdAt: Timestamp! @default(expr: "request.time")
+"""
+Booking status enumeration
+"""
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  CHECKED_IN
+  WAITLIST
+  EXPIRED
+  NO_SHOW
 }
 
-type Notification @table {
+"""
+Payment status enumeration
+"""
+enum PaymentStatus {
+  NOT_REQUIRED
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+# ============================================================================
+# FAVORITES (Many-to-Many: User <-> Event)
+# ============================================================================
+
+"""
+User's favorite events - junction table for many-to-many
+"""
+type FavoriteEvent @table(name: "favorite_events")
+  @index(fields: ["userId"])
+  @index(fields: ["eventId"]) {
+  
   id: UUID! @default(expr: "uuidV4()")
-  userId: String!
+  
+  # Relationships
+  userId: UUID! @ref(table: "users", field: "id")
+  user: User
+  eventId: UUID! @ref(table: "events", field: "id")
+  event: Event
+  
+  # Timestamps
+  createdAt: Timestamp! @default(expr: "request.time")
+  
+  # Unique constraint: one favorite per user per event
+  # @@unique([userId, eventId])  # Handled at DB level
+}
+
+# ============================================================================
+# NOTIFICATIONS
+# ============================================================================
+
+"""
+User notifications for event updates, reminders, etc.
+"""
+type Notification @table(name: "notifications")
+  @index(fields: ["userId", "read"])
+  @index(fields: ["userId", "createdAt"]) {
+  
+  id: UUID! @default(expr: "uuidV4()")
+  
+  # Target user
+  userId: UUID! @ref(table: "users", field: "id")
+  user: User
+  
+  # Content
   title: String!
   message: String!
-  type: String!
+  
+  # Type for categorization and icons
+  type: NotificationType! @default(value: "GENERAL")
+  
+  # Related entities
+  eventId: UUID @ref(table: "events", field: "id")
+  event: Event
+  bookingId: UUID @ref(table: "bookings", field: "id")
+  booking: Booking
+  
+  # Deep link for navigation
+  actionUrl: String
+  
+  # Status
   read: Boolean! @default(value: false)
-  eventId: String
+  readAt: Timestamp
+  
+  # Timestamps
   createdAt: Timestamp! @default(expr: "request.time")
+  expiresAt: Timestamp  # Auto-cleanup after expiry
 }
 
-type FavoriteEvent @table {
-  id: UUID! @default(expr: "uuidV4()")
-  userId: String!
-  eventId: String!
-  createdAt: Timestamp! @default(expr: "request.time")
+"""
+Notification types enumeration
+"""
+enum NotificationType {
+  GENERAL
+  EVENT_REMINDER
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  EVENT_UPDATE
+  EVENT_CANCELLED
+  WAITLIST_PROMOTED
+  CHECK_IN_REMINDER
+  REVIEW_REQUEST
+  ANNOUNCEMENT
 }
 
-type CheckInLog @table {
+# ============================================================================
+# REVIEWS & RATINGS
+# ============================================================================
+
+"""
+Event reviews and ratings from attendees
+Only users who attended (checked_in status) can review
+"""
+type Review @table(name: "reviews")
+  @index(fields: ["eventId", "createdAt"])
+  @index(fields: ["userId"])
+  @index(fields: ["rating"]) {
+  
   id: UUID! @default(expr: "uuidV4()")
-  bookingId: String!
-  eventId: String!
-  userId: String!
-  checkedInBy: String!
+  
+  # Relationships
+  userId: UUID! @ref(table: "users", field: "id")
+  user: User
+  eventId: UUID! @ref(table: "events", field: "id")
+  event: Event
+  
+  # Rating (1-5 stars)
+  rating: Int!  # Constraint: CHECK (rating >= 1 AND rating <= 5)
+  
+  # Review content
+  comment: String
+  isAnonymous: Boolean! @default(value: false)
+  
+  # Moderation
+  isFlagged: Boolean! @default(value: false)
+  flagReason: String
+  flaggedBy: UUID @ref(table: "users", field: "id")
+  flaggedAt: Timestamp
+  isApproved: Boolean! @default(value: true)
+  
+  # Denormalized
+  userName: String
+  userAvatarUrl: String
+  
+  # Soft delete
+  isDeleted: Boolean! @default(value: false)
+  deletedAt: Timestamp
+  
+  # Timestamps
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+# ============================================================================
+# CHECK-IN LOGS (Audit Trail)
+# ============================================================================
+
+"""
+Audit log for event check-ins
+Immutable - no updates or deletes
+"""
+type CheckInLog @table(name: "check_in_logs")
+  @index(fields: ["eventId", "checkedInAt"])
+  @index(fields: ["bookingId"]) {
+  
+  id: UUID! @default(expr: "uuidV4()")
+  
+  # References
+  bookingId: UUID! @ref(table: "bookings", field: "id")
+  booking: Booking
+  eventId: UUID! @ref(table: "events", field: "id")
+  event: Event
+  userId: UUID! @ref(table: "users", field: "id")
+  user: User
+  
+  # Who performed check-in
+  checkedInBy: UUID! @ref(table: "users", field: "id")
+  operator: User
+  
+  # Method used
+  method: CheckInMethod! @default(value: "QR_SCAN")
+  
+  # Device/location info (optional)
+  deviceInfo: String
+  ipAddress: String
+  
+  # Timestamp
   checkedInAt: Timestamp! @default(expr: "request.time")
-  method: String! @default(value: "qr")
 }
 
-type EventAnnouncement @table {
+"""
+Check-in method enumeration
+"""
+enum CheckInMethod {
+  QR_SCAN
+  MANUAL_ENTRY
+  TICKET_ID
+  AUTO
+}
+
+# ============================================================================
+# EVENT ANNOUNCEMENTS
+# ============================================================================
+
+"""
+Announcements sent to event participants
+"""
+type EventAnnouncement @table(name: "event_announcements")
+  @index(fields: ["eventId", "createdAt"]) {
+  
   id: UUID! @default(expr: "uuidV4()")
-  eventId: String!
+  
+  # Target event
+  eventId: UUID! @ref(table: "events", field: "id")
+  event: Event
+  
+  # Content
   title: String!
   message: String!
-  createdBy: String!
+  priority: AnnouncementPriority! @default(value: "NORMAL")
+  
+  # Creator
+  createdBy: UUID! @ref(table: "users", field: "id")
+  author: User
+  
+  # Targeting
+  sendPush: Boolean! @default(value: true)
+  sendEmail: Boolean! @default(value: false)
+  
+  # Timestamps
   createdAt: Timestamp! @default(expr: "request.time")
+  scheduledFor: Timestamp  # For scheduled announcements
+  sentAt: Timestamp
 }
 
-type PaymentTransaction @table {
+"""
+Announcement priority levels
+"""
+enum AnnouncementPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+# ============================================================================
+# PAYMENT TRANSACTIONS
+# ============================================================================
+
+"""
+Payment transaction records for audit and reconciliation
+Immutable - created once, never updated
+"""
+type PaymentTransaction @table(name: "payment_transactions")
+  @index(fields: ["bookingId"])
+  @index(fields: ["userId", "createdAt"])
+  @index(fields: ["status"]) {
+  
   id: UUID! @default(expr: "uuidV4()")
-  bookingId: String!
-  userId: String!
+  
+  # References
+  bookingId: UUID! @ref(table: "bookings", field: "id")
+  booking: Booking
+  userId: UUID! @ref(table: "users", field: "id")
+  user: User
+  eventId: UUID! @ref(table: "events", field: "id")
+  event: Event
+  
+  # Amount
   amount: Float!
   currency: String! @default(value: "INR")
-  status: String!
+  
+  # Payment gateway details
+  gateway: String! @default(value: "razorpay")
   gatewayTransactionId: String
-  gatewayResponse: String
+  gatewayOrderId: String
+  gatewayResponse: String  # JSON response from gateway
+  
+  # Status
+  status: TransactionStatus!
+  
+  # Refund info (if applicable)
+  refundAmount: Float
+  refundedAt: Timestamp
+  refundReason: String
+  
+  # Timestamps
   createdAt: Timestamp! @default(expr: "request.time")
+  completedAt: Timestamp
+}
+
+"""
+Transaction status enumeration
+"""
+enum TransactionStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+  REFUND_INITIATED
+  REFUNDED
+}
+
+# ============================================================================
+# USER UPLOADED FILES METADATA
+# ============================================================================
+
+"""
+Metadata for files uploaded to Firebase Storage
+Tracks file ownership and enables cleanup of orphaned files
+"""
+type FileUpload @table(name: "file_uploads")
+  @index(fields: ["userId", "type"])
+  @index(fields: ["createdAt"]) {
+  
+  id: UUID! @default(expr: "uuidV4()")
+  
+  # Owner
+  userId: UUID! @ref(table: "users", field: "id")
+  user: User
+  
+  # File info
+  type: FileType!
+  filename: String!
+  originalFilename: String!
+  mimeType: String!
+  size: Int!  # bytes
+  
+  # Storage location
+  storagePath: String!  # Full path in Firebase Storage
+  downloadUrl: String   # Public URL (if applicable)
+  
+  # Reference to related entity
+  relatedEntityType: String  # 'event', 'user', 'booking'
+  relatedEntityId: UUID
+  
+  # Status
+  isProcessed: Boolean! @default(value: false)
+  isDeleted: Boolean! @default(value: false)
+  deletedAt: Timestamp
+  
+  # Timestamps
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+"""
+File type enumeration
+"""
+enum FileType {
+  AVATAR
+  ID_CARD
+  EVENT_IMAGE
+  TICKET
+  DOCUMENT
+}
+
+# ============================================================================
+# ANALYTICS & METRICS (Optional - for dashboard)
+# ============================================================================
+
+"""
+Daily event metrics for dashboard analytics
+Aggregated by Cloud Functions on a schedule
+"""
+type DailyEventMetrics @table(name: "daily_event_metrics")
+  @index(fields: ["date"])
+  @index(fields: ["eventId", "date"]) {
+  
+  id: UUID! @default(expr: "uuidV4()")
+  
+  # Date for this record
+  date: Date!
+  
+  # Optional event-specific metrics
+  eventId: UUID @ref(table: "events", field: "id")
+  event: Event
+  
+  # Counts
+  totalBookings: Int! @default(value: 0)
+  newBookings: Int! @default(value: 0)
+  cancellations: Int! @default(value: 0)
+  checkIns: Int! @default(value: 0)
+  
+  # Revenue
+  totalRevenue: Float! @default(value: 0)
+  
+  # Engagement
+  pageViews: Int! @default(value: 0)
+  uniqueVisitors: Int! @default(value: 0)
+  
+  # Timestamps
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
 }

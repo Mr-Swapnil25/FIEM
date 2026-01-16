@@ -7,6 +7,7 @@ import React from 'react';
 import StarRating, { RatingDistribution } from './StarRating';
 import { Review, RatingDistribution as RatingDistributionType } from '../types';
 import { SortOption } from '../hooks/useReviews';
+import { formatRelativeTime } from '../utils/dateFormat';
 
 interface ReviewsListProps {
   reviews: Review[];
@@ -160,23 +161,8 @@ interface ReviewCardProps {
 }
 
 const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-    });
-  };
+  // Using formatRelativeTime from shared utils for relative date display
+  const displayDate = formatRelativeTime(review.createdAt);
 
   return (
     <div className="bg-[#151921] rounded-xl p-4 border border-white/5">
@@ -206,7 +192,7 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
               {review.isAnonymous ? 'Anonymous' : review.userName || 'User'}
             </span>
             <span className="text-[10px] text-slate-500 shrink-0">
-              {formatDate(review.createdAt)}
+              {displayDate}
             </span>
           </div>
 

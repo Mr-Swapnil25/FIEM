@@ -5,6 +5,7 @@ import { useAuth } from '../../App';
 import { useUserFavorites, useRemoveFavorite } from '../../hooks';
 import { getUserFavoriteEvents } from '../../services/backend';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { formatDate, formatTime } from '../../utils/dateFormat';
 
 interface FavoriteWithEvent extends Event {
   favoriteId: string;
@@ -57,17 +58,7 @@ export default function FavoritesList() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const month = date.toLocaleString('default', { month: 'short' }).toUpperCase();
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${month} ${day}`;
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  };
+  // formatDate and formatTime imported from utils/dateFormat
 
   const isPastEvent = (dateString: string) => {
     return new Date(dateString) < new Date();

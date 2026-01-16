@@ -9,6 +9,7 @@ import { useEventReviews, useReviewSubmission } from '../../hooks/useReviews';
 import { RatingBadge } from '../../components/StarRating';
 import ReviewForm from '../../components/ReviewForm';
 import ReviewsList from '../../components/ReviewsList';
+import { formatFullDate } from '../../utils/dateFormat';
 
 export default function EventDetails() {
   const { id } = useParams<{ id: string }>();
@@ -134,15 +135,8 @@ export default function EventDetails() {
     window.open(mapsUrl, '_blank');
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
+  // formatDate uses formatFullDate from shared utils
+  const formatDate = (dateString: string) => formatFullDate(dateString);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { Event } from '../../types';
 import { useAuth } from '../../App';
+import { formatDate, formatTime } from '../../utils/dateFormat';
 
 export default function BookingConfirmation() {
   const { state } = useLocation();
@@ -29,19 +30,7 @@ export default function BookingConfirmation() {
 
   const ticketId = `ETK${Math.floor(Math.random() * 100000).toString().padStart(5, '0')}XYZ`;
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  };
+  // formatDateShort and formatTime imported from utils/dateFormat
 
   const handleAddToCalendar = () => {
     const startDate = new Date(event.eventDate);

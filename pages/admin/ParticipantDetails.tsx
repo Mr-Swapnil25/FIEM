@@ -4,6 +4,7 @@ import { getParticipantDetails } from '../../services/backend';
 import { Booking, Event, User } from '../../types';
 import { useAuth } from '../../App';
 import { useCheckInParticipant, useCancelBooking } from '../../hooks';
+import { formatDateShort, formatTime } from '../../utils/dateFormat';
 
 interface ParticipantData {
   booking: Booking;
@@ -113,21 +114,8 @@ export default function ParticipantDetails() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
+  // Using formatDateShort from shared utils, formatTime imported
+  const formatDate = formatDateShort;
 
   if (loading) {
     return (

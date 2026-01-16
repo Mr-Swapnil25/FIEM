@@ -5,6 +5,7 @@ import { usePublishedEvents, useDeleteEvent, useDashboardStats } from '../../hoo
 import { useRealtimeEvents } from '../../hooks/useRealtime';
 import { useAuth } from '../../App';
 import { LiveIndicator } from '../../components/LiveIndicator';
+import { formatDateWithTime } from '../../utils/dateFormat';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -47,14 +48,6 @@ export default function AdminDashboard() {
       return matchesSearch && event.status === 'draft';
     }
   }), [events, search, filter]);
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const day = date.toLocaleDateString('en-US', { weekday: 'short' });
-    const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    return `${day}, ${monthDay} • ${time}`;
-  };
 
   const getStatusBadge = (status: EventStatus, eventDate: string) => {
     const isPast = new Date(eventDate) < new Date();
@@ -234,7 +227,7 @@ export default function AdminDashboard() {
                       <h3 className="text-base font-semibold text-white leading-tight mb-1">{event.title}</h3>
                       <div className="flex items-center gap-1.5 text-indigo-400 text-xs font-medium mb-2">
                         <span className="material-symbols-outlined text-[16px]">calendar_today</span>
-                        <span>{formatDate(event.eventDate)}</span>
+                        <span>{formatDateWithTime(event.eventDate)}</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-auto">

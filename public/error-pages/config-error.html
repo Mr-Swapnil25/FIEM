@@ -198,14 +198,26 @@
   <script>
     // This page is shown when environment validation fails
     // The actual error details are passed via URL parameters or localStorage
+    // SEC-003 FIX: Use textContent instead of innerHTML to prevent XSS
     try {
       const errors = JSON.parse(localStorage.getItem('envErrors') || '[]');
       const errorList = document.getElementById('errorList');
       
+      // Clear existing content safely
+      while (errorList.firstChild) {
+        errorList.removeChild(errorList.firstChild);
+      }
+      
       if (errors.length > 0) {
-        errorList.innerHTML = errors.map(err => `<li>${err.key}</li>`).join('');
+        errors.forEach(err => {
+          const li = document.createElement('li');
+          li.textContent = err.key; // Safe: textContent escapes HTML
+          errorList.appendChild(li);
+        });
       } else {
-        errorList.innerHTML = '<li>Unknown configuration error</li>';
+        const li = document.createElement('li');
+        li.textContent = 'Unknown configuration error';
+        errorList.appendChild(li);
       }
     } catch (e) {
       console.error('Failed to parse error details:', e);

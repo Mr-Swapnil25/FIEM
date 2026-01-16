@@ -1,0 +1,121 @@
+# GitHub Actions CI Workflow
+# Created as part of Phase 5 Remediation
+# Runs on push to main/develop and pull requests
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop, audit-fixes-2026]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript type check
+        run: npx tsc --noEmit
+        continue-on-error: true # Allow build to continue despite type errors (legacy codebase)
+
+      - name: Run ESLint
+        run: npm run lint --if-present
+        continue-on-error: true
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          # Use placeholder values for CI build
+          VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || 'ci-placeholder' }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN || 'ci-placeholder' }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID || 'ci-placeholder' }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET || 'ci-placeholder' }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID || 'ci-placeholder' }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID || 'ci-placeholder' }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true # Report but don't fail on audit issues
+
+  functions-check:
+    name: Cloud Functions Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install function dependencies
+        working-directory: ./functions
+        run: npm ci
+
+      - name: Type check functions
+        working-directory: ./functions
+        run: npx tsc --noEmit
+        continue-on-error: true
+
+      - name: Build functions
+        working-directory: ./functions
+        run: npm run build

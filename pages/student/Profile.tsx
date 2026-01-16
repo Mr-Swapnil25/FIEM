@@ -3,6 +3,7 @@ import { useAuth } from '../../App';
 import { useNavigate } from 'react-router-dom';
 import { Booking } from '../../types';
 import { useUserBookings } from '../../hooks';
+import { formatDate, formatTime } from '../../utils/dateFormat';
 
 export default function StudentProfile() {
   const { user, logout } = useAuth();
@@ -41,17 +42,7 @@ export default function StudentProfile() {
     return activeTab === 'upcoming' ? !isPast : isPast;
   }), [bookings, activeTab]);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const month = date.toLocaleString('default', { month: 'short' }).toUpperCase();
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${month} ${day}`;
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  };
+  // formatDate and formatTime imported from utils/dateFormat
 
   return (
     <div className="relative flex h-full min-h-screen w-full flex-col font-sans overflow-x-hidden pb-6 bg-background text-white">
