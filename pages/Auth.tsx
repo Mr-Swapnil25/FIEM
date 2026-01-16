@@ -2,13 +2,17 @@ import React, { useState } from 'react';
 import { useAuth } from '../App';
 import { validateEmail, sendPasswordResetEmail, signInWithGoogle, signInWithApple } from '../services/authService';
 import { uploadIdCard } from '../services/storageService';
+import { PasswordStrengthIndicator } from '../components/auth/PasswordManagement';
+import { useNavigate } from 'react-router-dom';
 
 export default function LoginScreen() {
   const { login, register } = useAuth();
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState<'student' | 'admin'>('student');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -344,10 +348,19 @@ export default function LoginScreen() {
                   </span>
                 </button>
               </div>
+              
+              {/* Password Strength Indicator - Registration Only */}
+              {!isLogin && password && (
+                <div className="mt-2">
+                  <PasswordStrengthIndicator password={password} showFeedback={true} />
+                </div>
+              )}
+              
+              {/* Forgot Password - Login Only */}
               {isLogin && (
                 <button 
                   type="button"
-                  onClick={handleForgotPassword}
+                  onClick={() => navigate('/reset-password')}
                   className="text-xs text-primary hover:text-primaryLight font-medium ml-1"
                 >
                   Forgot password?

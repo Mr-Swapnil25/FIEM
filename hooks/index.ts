@@ -77,3 +77,15 @@ export {
   useRealtimeConnectionStatus,
   useLiveIndicator,
 } from './useRealtime';
+
+// Auth hooks
+export {
+  useAuthState,
+  useAuthOperations,
+  useSessionMonitor,
+  useEmailVerification,
+  usePasswordStrength,
+  type AuthState,
+  type UseAuthReturn,
+  type SessionInfo,
+} from './useAuth';
