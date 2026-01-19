@@ -217,6 +217,7 @@ export function useRealtimeUserBookings(userId: string | undefined, options: Use
             status: b.status as Booking['status'],
             amountPaid: b.totalAmount,
             bookedAt: firestoreService.timestampToISO(b.createdAt),
+            createdAt: firestoreService.timestampToISO(b.createdAt),
             checkedInAt: b.checkInTime ? firestoreService.timestampToISO(b.checkInTime) : undefined,
             isWaitlist: b.isWaitlist,
             eventTitle: b.eventTitle,
@@ -285,6 +286,7 @@ export function useRealtimeEventParticipants(eventId: string | undefined, option
             status: b.status as Booking['status'],
             amountPaid: b.totalAmount,
             bookedAt: firestoreService.timestampToISO(b.createdAt),
+            createdAt: firestoreService.timestampToISO(b.createdAt),
             checkedInAt: b.checkInTime ? firestoreService.timestampToISO(b.checkInTime) : undefined,
             isWaitlist: b.isWaitlist,
             eventTitle: b.eventTitle,
@@ -354,8 +356,10 @@ export function useRealtimeNotifications(userId: string | undefined, options: Us
           
           const mappedNotifications: Notification[] = notifications.map(n => ({
             id: n.id,
+            userId: userId,
             title: n.title,
             message: n.message,
+            type: (n.type || 'general') as Notification['type'],
             eventType: n.type,
             isRead: n.read,
             createdAt: firestoreService.timestampToISO(n.createdAt),

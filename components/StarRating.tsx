@@ -135,8 +135,10 @@ export function RatingBadge({
 }
 
 // Rating distribution bar for reviews section
+import type { RatingDistribution as RatingDistributionType } from '../types';
+
 interface RatingDistributionProps {
-  distribution: Record<number, number>;
+  distribution: RatingDistributionType | Record<number, number>;
   totalReviews: number;
   className?: string;
 }

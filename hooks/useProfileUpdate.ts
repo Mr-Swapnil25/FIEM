@@ -233,6 +233,7 @@ export function useProfileUpdate(initialUser: User | null): UseProfileUpdateRetu
         id: userId,
         email: '', // Will be filled by caller
         role: 'student', // Will be filled by caller
+        createdAt: new Date().toISOString(), // Will be overwritten by caller with actual value
         ...updateData,
         name: formData.name.trim()
       };

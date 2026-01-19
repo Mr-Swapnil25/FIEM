@@ -107,7 +107,8 @@ export const onAuthStateChanged = (callback: (user: User | null) => void): (() =
             email: firebaseUser.email || '',
             name: defaultName,
             role: 'student',
-            department: emailParts?.department
+            department: emailParts?.department,
+            createdAt: new Date().toISOString()
           };
           
           // Create user in Cloud SQL via Data Connect
@@ -184,7 +185,8 @@ export const signUp = async (data: RegistrationData): Promise<AuthResult> => {
       role: data.role,
       phone: data.phone,
       avatarUrl: data.avatar,
-      department: emailParts?.department
+      department: emailParts?.department,
+      createdAt: new Date().toISOString()
     };
     
     await dcCreateUser(firebaseUser.uid, userData);
@@ -286,7 +288,8 @@ export const signIn = async (email: string, password: string): Promise<AuthResul
         email: normalizedEmail,
         name: defaultName,
         role: 'student',
-        department: emailParts?.department
+        department: emailParts?.department,
+        createdAt: new Date().toISOString()
       };
       
       userProfile = await dcCreateUser(firebaseUser.uid, newUserData);
@@ -386,7 +389,8 @@ export const signInWithGoogle = async (): Promise<AuthResult> => {
         name: defaultName,
         role: 'student',
         avatarUrl: firebaseUser.photoURL || undefined,
-        department: emailParts?.department
+        department: emailParts?.department,
+        createdAt: new Date().toISOString()
       };
       
       userProfile = await dcCreateUser(firebaseUser.uid, newUserData);
@@ -464,7 +468,8 @@ export const signInWithApple = async (): Promise<AuthResult> => {
         email,
         name: defaultName,
         role: 'student',
-        avatarUrl: firebaseUser.photoURL || undefined
+        avatarUrl: firebaseUser.photoURL || undefined,
+        createdAt: new Date().toISOString()
       };
       
       userProfile = await dcCreateUser(firebaseUser.uid, newUserData);

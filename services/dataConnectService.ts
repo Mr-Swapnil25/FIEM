@@ -934,7 +934,8 @@ export const createBooking = async (
       qrCode,
       status: 'confirmed',
       amountPaid,
-      bookedAt: new Date().toISOString()
+      bookedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
     };
   } catch (error) {
     console.error('[DataConnect] Error creating booking:', error);
@@ -1230,6 +1231,7 @@ function mapDataConnectUserToUser(dcUser: DataConnectUser): User {
     name: displayName,
     email: dcUser.email,
     role: dcUser.role as 'student' | 'admin',
+    createdAt: dcUser.createdAt || new Date().toISOString(),
     // These fields aren't in the current schema but kept for compatibility
     phone: undefined,
     avatarUrl: undefined,
@@ -1267,6 +1269,7 @@ function mapDataConnectBookingToBooking(dcBooking: DataConnectBooking): Booking 
     amountPaid: 0,
     bookedAt: dcBooking.bookingDate,
     checkedInAt: dcBooking.checkedInAt,
+    createdAt: dcBooking.bookingDate,
     eventTitle: dcBooking.event.title,
     eventDate: `${dcBooking.event.date}T${dcBooking.event.time}`,
     eventVenue: dcBooking.event.venue,

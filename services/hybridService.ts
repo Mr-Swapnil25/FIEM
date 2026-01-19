@@ -12,7 +12,7 @@
  * @module services/hybridService
  */
 
-import { User, Event, Booking, Category, Notification, DashboardStats, Role } from '../types';
+import { User, Event, Booking, Category, Notification, NotificationType, DashboardStats, Role } from '../types';
 import * as dataConnect from './dataConnectService';
 import * as firestore from './firestoreService';
 import {
@@ -674,7 +674,18 @@ export async function checkExistingBooking(userId: string, eventId: string): Pro
 export async function listCategories(): Promise<HybridResult<Category[]>> {
   return executeWithFallback(
     'listCategories',
-    async () => dataConnect.getCategories(),
+    async () => {
+      const categories = await dataConnect.getCategories();
+      return categories.map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        icon: c.icon,
+        color: c.color,
+        isActive: c.isActive,
+        createdAt: new Date().toISOString() // Data Connect doesn't return createdAt
+      }));
+    },
     async () => {
       const categories = await firestore.listCategories();
       return categories.map(c => ({
@@ -683,7 +694,8 @@ export async function listCategories(): Promise<HybridResult<Category[]>> {
         description: c.description,
         icon: c.icon,
         color: c.color,
-        isActive: c.isActive
+        isActive: c.isActive,
+        createdAt: firestore.timestampToISO(c.createdAt)
       }));
     },
     { collection: 'categories' }
@@ -774,8 +786,10 @@ export async function getUserNotifications(userId: string): Promise<HybridResult
       const notifications = await dataConnect.getUserNotifications(userId);
       return notifications.map(n => ({
         id: n.id,
+        userId: userId,
         title: n.title,
         message: n.message,
+        type: (n.eventType || 'general') as NotificationType,
         eventType: n.eventType,
         isRead: n.isRead,
         createdAt: n.createdAt,
@@ -787,8 +801,10 @@ export async function getUserNotifications(userId: string): Promise<HybridResult
       const notifications = await firestore.getUserNotifications(userId);
       return notifications.map(n => ({
         id: n.id,
+        userId: userId,
         title: n.title,
         message: n.message,
+        type: (n.type || 'general') as NotificationType,
         eventType: n.type,
         isRead: n.read,
         createdAt: firestore.timestampToISO(n.createdAt),
@@ -1000,7 +1016,8 @@ function mapFirestoreUserToUser(fsUser: firestore.FirestoreUser): User {
     department: fsUser.department,
     year: fsUser.year,
     rollNo: fsUser.rollNo,
-    collegeIdUrl: fsUser.collegeIdUrl
+    collegeIdUrl: fsUser.collegeIdUrl,
+    createdAt: firestore.timestampToISO(fsUser.createdAt)
   };
 }
 
@@ -1042,6 +1059,7 @@ function mapFirestoreBookingToBooking(fsBooking: firestore.FirestoreBooking): Bo
     status: fsBooking.status as Booking['status'],
     amountPaid: fsBooking.totalAmount,
     bookedAt: firestore.timestampToISO(fsBooking.createdAt),
+    createdAt: firestore.timestampToISO(fsBooking.createdAt),
     checkedInAt: fsBooking.checkInTime ? firestore.timestampToISO(fsBooking.checkInTime) : undefined,
     isWaitlist: fsBooking.isWaitlist,
     eventTitle: fsBooking.eventTitle,

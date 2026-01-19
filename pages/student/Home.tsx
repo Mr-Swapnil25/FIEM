@@ -150,7 +150,7 @@ export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) 
             </div>
             <h3 className="text-lg font-bold text-gray-900">No events found</h3>
             <p className="text-gray-500 mb-6">Try adjusting your search or filters.</p>
-            <button onClick={fetchEvents} className="text-primary font-medium flex items-center justify-center mx-auto hover:underline">
+            <button onClick={() => refetchEvents()} className="text-primary font-medium flex items-center justify-center mx-auto hover:underline">
               <RefreshCw size={16} className="mr-2" /> Refresh List
             </button>
           </div>
@@ -334,7 +334,7 @@ export default function StudentHome({ isAdmin = false }: { isAdmin?: boolean }) 
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No events found</h3>
             <p className="text-slate-500 dark:text-slate-400 mb-6">Try adjusting your search or filters.</p>
             <button 
-              onClick={fetchEvents}
+              onClick={() => refetchEvents()}
               className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-full font-semibold shadow-lg shadow-primary/25 hover:bg-primaryDark transition-all active:scale-95"
             >
               <span className="material-symbols-outlined text-[20px]">refresh</span>
