@@ -1,10 +1,11 @@
 ﻿/**
  * Hybrid Service - Firebase Firestore API Layer
  * 
- * Provides a unified API for Firebase Firestore operations.
- * Migrated from DataConnect to pure Firestore implementation.
- * 
- * ZERO localStorage TOLERANCE - All data goes to Firebase
+ * Provides a unified API for Firebase Firestore operations with:
+ * - Retry logic with exponential backoff
+ * - Timeout handling
+ * - Error transformation to user-friendly messages
+ * - Fallback monitoring for debugging
  * 
  * @module services/hybridService
  */
@@ -119,7 +120,7 @@ function recordFallback(operation: string, reason: string, originalError?: strin
   };
 
   fallbackEvents.push(event);
-  
+
   // Trim to max size
   if (fallbackEvents.length > config.maxFallbackEvents) {
     fallbackEvents.shift();
@@ -179,9 +180,8 @@ export function clearFallbackEvents(): void {
 /**
  * Execute Firestore operation with retry and timeout
  */
-async function executeWithFallback<T>(
+async function executeFirestoreOp<T>(
   operation: string,
-  _dataConnectFn: () => Promise<T>,  // Kept for backward compatibility, not used
   firestoreFn: () => Promise<T>,
   context?: Partial<OperationContext>
 ): Promise<HybridResult<T>> {
@@ -192,7 +192,6 @@ async function executeWithFallback<T>(
     ...context
   };
 
-  // Always use Firestore (DataConnect removed)
   try {
     const data = await withRetry(
       () => withTimeout(firestoreFn, config.timeout, fullContext),
@@ -219,6 +218,18 @@ async function executeWithFallback<T>(
 }
 
 /**
+ * Backward-compatible wrapper - ignores the legacy DataConnect parameter
+ */
+async function executeWithFallback<T>(
+  operation: string,
+  _legacyDataConnectFn: () => Promise<T>,
+  firestoreFn: () => Promise<T>,
+  context?: Partial<OperationContext>
+): Promise<HybridResult<T>> {
+  return executeFirestoreOp(operation, firestoreFn, context);
+}
+
+/**
  * Convert HybridResult to simple ServiceResult
  */
 function toServiceResult<T>(result: HybridResult<T>): ServiceResult<T> {
@@ -237,9 +248,8 @@ function toServiceResult<T>(result: HybridResult<T>): ServiceResult<T> {
  * Get user by ID
  */
 export async function getUserById(userId: string): Promise<HybridResult<User | null>> {
-  return executeWithFallback(
+  return executeFirestoreOp(
     'getUserById',
-    async () => undefined as any, // Was: dataConnect.getUserById(userId),
     async () => {
       const user = await firestore.getUserById(userId);
       return user ? mapFirestoreUserToUser(user) : null;
@@ -252,9 +262,8 @@ export async function getUserById(userId: string): Promise<HybridResult<User | n
  * Get user by email
  */
 export async function getUserByEmail(email: string): Promise<HybridResult<User | null>> {
-  return executeWithFallback(
+  return executeFirestoreOp(
     'getUserByEmail',
-    async () => undefined as any, // Was: dataConnect.getUserByEmail(email),
     async () => {
       const user = await firestore.getUserByEmail(email);
       return user ? mapFirestoreUserToUser(user) : null;
@@ -267,9 +276,8 @@ export async function getUserByEmail(email: string): Promise<HybridResult<User |
  * Create a new user
  */
 export async function createUser(userId: string, data: Omit<User, 'id'>): Promise<HybridResult<User>> {
-  return executeWithFallback(
+  return executeFirestoreOp(
     'createUser',
-    async () => undefined as any, // Was: dataConnect.createUser(userId, data),
     async () => {
       await firestore.createUser(userId, {
         email: data.email,
@@ -294,7 +302,7 @@ export async function createUser(userId: string, data: Omit<User, 'id'>): Promis
 export async function updateUser(userId: string, data: Partial<User>): Promise<HybridResult<void>> {
   return executeWithFallback(
     'updateUser',
-    async () => {}, // Was: dataConnect.updateUser(userId, data); },
+    async () => { }, // Was: dataConnect.updateUser(userId, data); },
     async () => {
       await firestore.updateUser(userId, {
         displayName: data.name,
@@ -410,7 +418,7 @@ export async function createEvent(data: {
 export async function updateEvent(eventId: string, data: Partial<Omit<Event, 'id' | 'createdAt'>>): Promise<HybridResult<void>> {
   return executeWithFallback(
     'updateEvent',
-    async () => {}, // Was: dataConnect.updateEvent(eventId, data); },
+    async () => { }, // Was: dataConnect.updateEvent(eventId, data); },
     async () => {
       await firestore.updateEvent(eventId, {
         title: data.title,
@@ -435,7 +443,7 @@ export async function updateEvent(eventId: string, data: Partial<Omit<Event, 'id
 export async function deleteEvent(eventId: string): Promise<HybridResult<void>> {
   return executeWithFallback(
     'deleteEvent',
-    async () => {}, // Was: dataConnect.deleteEvent(eventId); },
+    async () => { }, // Was: dataConnect.deleteEvent(eventId); },
     async () => { await firestore.deleteEvent(eventId); },
     { documentId: eventId, collection: 'events' }
   );
@@ -447,7 +455,7 @@ export async function deleteEvent(eventId: string): Promise<HybridResult<void>> 
 export async function updateEventStatus(eventId: string, status: Event['status']): Promise<HybridResult<void>> {
   return executeWithFallback(
     'updateEventStatus',
-    async () => {}, // Was: dataConnect.updateEventStatus(eventId, status); },
+    async () => { }, // Was: dataConnect.updateEventStatus(eventId, status); },
     async () => { await firestore.updateEventStatus(eventId, status); },
     { documentId: eventId, collection: 'events' }
   );
@@ -552,7 +560,7 @@ export async function createBooking(userId: string, eventId: string): Promise<Hy
 export async function cancelBooking(bookingId: string, eventId: string, reason?: string): Promise<HybridResult<void>> {
   return executeWithFallback(
     'cancelBooking',
-    async () => {}, // Was: dataConnect.cancelBooking(bookingId, eventId); },
+    async () => { }, // Was: dataConnect.cancelBooking(bookingId, eventId); },
     async () => { await firestore.cancelBooking(bookingId, reason); },
     { documentId: bookingId, collection: 'bookings' }
   );
@@ -568,7 +576,7 @@ export async function checkInParticipant(
 ): Promise<HybridResult<void>> {
   return executeWithFallback(
     'checkInParticipant',
-    async () => {}, // Was: dataConnect.checkInParticipant(bookingId, checkedInBy); },
+    async () => { }, // Was: dataConnect.checkInParticipant(bookingId, checkedInBy); },
     async () => { await firestore.checkInParticipant(bookingId, checkedInBy, method || 'qr_scan'); },
     { documentId: bookingId, collection: 'bookings' }
   );
@@ -681,7 +689,7 @@ export async function addFavorite(userId: string, eventId: string): Promise<Hybr
 export async function removeFavorite(favoriteId: string, userId: string, eventId: string): Promise<HybridResult<void>> {
   return executeWithFallback(
     'removeFavorite',
-    async () => {}, // Was: dataConnect.removeFavorite(favoriteId); },
+    async () => { }, // Was: dataConnect.removeFavorite(favoriteId); },
     async () => { await firestore.removeFavorite(userId, eventId); },
     { userId, collection: 'favorites' }
   );
@@ -743,7 +751,7 @@ export async function createNotification(userId: string, title: string, message:
 export async function markNotificationRead(notificationId: string): Promise<HybridResult<void>> {
   return executeWithFallback(
     'markNotificationRead',
-    async () => {}, // Was: dataConnect.markNotificationRead(notificationId); },
+    async () => { }, // Was: dataConnect.markNotificationRead(notificationId); },
     async () => { await firestore.markNotificationRead(notificationId); },
     { documentId: notificationId, collection: 'notifications' }
   );

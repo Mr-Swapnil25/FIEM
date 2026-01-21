@@ -19,7 +19,7 @@ import * as firestoreService from './firestoreService';
  */
 export const generateTicketId = (): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const randomPart = Array.from({ length: 6 }, () => 
+  const randomPart = Array.from({ length: 6 }, () =>
     chars[Math.floor(Math.random() * chars.length)]
   ).join('');
   return `EVT-${Date.now().toString(36).toUpperCase()}-${randomPart}`;
@@ -126,7 +126,7 @@ export const createUser = async (userId: string, userData: Omit<User, 'id'>): Pr
   const nameParts = (userData.name || '').trim().split(' ');
   const firstName = nameParts[0] || undefined;
   const lastName = nameParts.slice(1).join(' ') || undefined;
-  
+
   await firestoreService.createUser(userId, {
     email: email,
     displayName: userData.name || `${firstName || ''} ${lastName || ''}`.trim() || 'User',
@@ -140,7 +140,7 @@ export const createUser = async (userId: string, userData: Omit<User, 'id'>): Pr
     phone: userData.phone,
     avatarUrl: userData.avatarUrl,
   });
-  
+
   return { id: userId, ...userData };
 };
 
@@ -148,7 +148,7 @@ export const updateUser = async (userId: string, data: Partial<User>): Promise<v
   const nameParts = (data.name || '').trim().split(' ');
   const firstName = nameParts[0] || undefined;
   const lastName = nameParts.slice(1).join(' ') || undefined;
-  
+
   await firestoreService.updateUser(userId, {
     displayName: data.name,
     firstName: firstName,
@@ -212,7 +212,7 @@ export const createEvent = async (
     requiresApproval: false,
     isPublic: true,
   });
-  
+
   return {
     id: eventId,
     ...eventData,
@@ -282,7 +282,7 @@ export const checkExistingBooking = async (userId: string, eventId: string): Pro
 export const createBooking = async (userId: string, eventId: string, amountPaid: number = 0): Promise<Booking> => {
   const ticketId = generateTicketId();
   const qrCode = generateQRCode(eventId, ticketId);
-  
+
   const bookingId = await firestoreService.createBooking({
     userId,
     eventId,
@@ -294,7 +294,7 @@ export const createBooking = async (userId: string, eventId: string, amountPaid:
     totalAmount: amountPaid,
     paymentStatus: amountPaid > 0 ? 'completed' : 'not_required',
   });
-  
+
   return {
     id: bookingId,
     userId,
@@ -310,8 +310,8 @@ export const createBooking = async (userId: string, eventId: string, amountPaid:
 
 export const checkInParticipant = async (bookingId: string, staffUserId: string, method: string = 'qr_scan'): Promise<void> => {
   await firestoreService.checkInParticipant(
-    bookingId, 
-    staffUserId, 
+    bookingId,
+    staffUserId,
     method as 'qr_scan' | 'manual_entry' | 'ticket_id' | 'auto'
   );
 };
@@ -383,7 +383,7 @@ export const getUserFavorites = async (userId: string): Promise<FavoriteItem[]> 
 export const getUserFavoriteEvents = async (userId: string): Promise<Event[]> => {
   const favorites = await firestoreService.getUserFavorites(userId);
   if (favorites.length === 0) return [];
-  
+
   const eventIds = favorites.map(f => f.eventId);
   const events = await firestoreService.getEventsByIds(eventIds);
   return events.map(mapFirestoreEventToEvent);
@@ -517,16 +517,16 @@ export const getParticipantDetails = async (bookingId: string): Promise<{
   event: Event | null;
 }> => {
   const booking = await getBookingById(bookingId);
-  
+
   if (!booking) {
     return { booking: null, user: null, event: null };
   }
-  
+
   const [user, event] = await Promise.all([
     getUserById(booking.userId),
     getEventById(booking.eventId)
   ]);
-  
+
   return { booking, user, event };
 };
 
@@ -580,7 +580,7 @@ export const getEventStats = async (eventId: string): Promise<{
     getEventParticipants(eventId),
     getEventById(eventId)
   ]);
-  
+
   return {
     totalBookings: participants.filter(p => p.status !== 'cancelled').length,
     checkedIn: participants.filter(p => p.status === 'checked_in').length,
@@ -595,7 +595,7 @@ export const getEventStats = async (eventId: string): Promise<{
  * Book event with validation
  */
 export const bookEvent = async (
-  userId: string, 
+  userId: string,
   eventId: string
 ): Promise<{ success: boolean; booking?: Booking; error?: string }> => {
   try {
@@ -603,26 +603,26 @@ export const bookEvent = async (
     if (!event) {
       return { success: false, error: 'Event not found' };
     }
-    
+
     if (event.status !== 'published') {
       return { success: false, error: 'Event is not available for booking' };
     }
-    
+
     if (event.availableSlots <= 0) {
       return { success: false, error: 'No slots available' };
     }
-    
+
     const hasBooking = await checkExistingBooking(userId, eventId);
     if (hasBooking) {
       return { success: false, error: 'You have already booked this event' };
     }
-    
+
     if (new Date(event.eventDate) < new Date()) {
       return { success: false, error: 'Cannot book past events' };
     }
-    
+
     const booking = await createBooking(userId, eventId, event.price);
-    
+
     return { success: true, booking };
   } catch (error: unknown) {
     console.error('[Backend] Book event error:', error);
@@ -634,30 +634,30 @@ export const bookEvent = async (
  * Cancel booking with validation
  */
 export const cancelUserBooking = async (
-  bookingId: string, 
+  bookingId: string,
   userId: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     const booking = await getBookingById(bookingId);
-    
+
     if (!booking) {
       return { success: false, error: 'Booking not found' };
     }
-    
+
     if (booking.userId !== userId) {
       return { success: false, error: 'Unauthorized' };
     }
-    
+
     if (booking.status === 'cancelled') {
       return { success: false, error: 'Booking is already cancelled' };
     }
-    
+
     if (booking.status === 'checked_in') {
       return { success: false, error: 'Cannot cancel after check-in' };
     }
-    
+
     await cancelBooking(bookingId, booking.eventId);
-    
+
     return { success: true };
   } catch (error: unknown) {
     console.error('[Backend] Cancel booking error:', error);
@@ -674,23 +674,23 @@ export const checkInByTicketId = async (
 ): Promise<{ success: boolean; booking?: Booking; error?: string }> => {
   try {
     const booking = await getBookingByTicketId(ticketId);
-    
+
     if (!booking) {
       return { success: false, error: 'Ticket not found' };
     }
-    
+
     if (booking.status === 'checked_in') {
       return { success: false, error: 'Already checked in' };
     }
-    
+
     if (booking.status === 'cancelled') {
       return { success: false, error: 'Booking was cancelled' };
     }
-    
+
     await checkInParticipant(booking.id, staffUserId, 'ticket_id');
-    
+
     const updatedBooking = await getBookingByTicketId(ticketId);
-    
+
     return { success: true, booking: updatedBooking || booking };
   } catch (error: unknown) {
     console.error('[Backend] Check in error:', error);
@@ -703,11 +703,11 @@ export const checkInByTicketId = async (
  */
 export const searchEvents = async (searchTerm: string): Promise<Event[]> => {
   if (!searchTerm.trim()) return [];
-  
+
   const events = await getPublishedEvents();
   const term = searchTerm.toLowerCase();
-  
-  return events.filter(event => 
+
+  return events.filter(event =>
     event.title.toLowerCase().includes(term) ||
     event.venue.toLowerCase().includes(term) ||
     event.description.toLowerCase().includes(term)
@@ -728,10 +728,10 @@ export const getEventReviews = async (
   options: { sortBy?: 'recent' | 'highest' | 'lowest'; page?: number; pageSize?: number } = {}
 ): Promise<{ reviews: Review[]; total: number }> => {
   const { sortBy = 'recent', page = 1, pageSize = 10 } = options;
-  
+
   try {
     const firestoreReviews = await firestoreService.getEventReviews(eventId);
-    
+
     const allReviews: Review[] = firestoreReviews
       .filter(r => !r.isFlagged && !r.isDeleted)
       .map(r => ({
@@ -748,7 +748,7 @@ export const getEventReviews = async (
         isFlagged: r.isFlagged,
         flagReason: r.flagReason,
       }));
-    
+
     const sorted = [...allReviews].sort((a, b) => {
       switch (sortBy) {
         case 'highest':
@@ -760,10 +760,10 @@ export const getEventReviews = async (
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
     });
-    
+
     const start = (page - 1) * pageSize;
     const paginated = sorted.slice(start, start + pageSize);
-    
+
     return {
       reviews: paginated,
       total: allReviews.length,
@@ -784,9 +784,9 @@ export const getUserReviewForEvent = async (
   try {
     const firestoreReviews = await firestoreService.getEventReviews(eventId);
     const userReview = firestoreReviews.find(r => r.userId === userId && !r.isDeleted);
-    
+
     if (!userReview) return null;
-    
+
     return {
       id: userReview.id,
       userId: userReview.userId,
@@ -822,9 +822,9 @@ export const createReview = async (data: {
     if (existingReview) {
       throw new Error('You have already reviewed this event');
     }
-    
+
     const user = await getUserById(data.userId);
-    
+
     const reviewId = await firestoreService.createReview({
       userId: data.userId,
       eventId: data.eventId,
@@ -834,9 +834,9 @@ export const createReview = async (data: {
       userName: data.isAnonymous ? 'Anonymous' : user?.name || 'User',
       userAvatarUrl: data.isAnonymous ? undefined : user?.avatarUrl,
     });
-    
+
     await updateEventRatingStats(data.eventId);
-    
+
     return {
       id: reviewId,
       userId: data.userId,
@@ -862,7 +862,7 @@ export const deleteReview = async (reviewId: string): Promise<void> => {
   try {
     const events = await firestoreService.listEvents();
     let eventId: string | null = null;
-    
+
     for (const event of events) {
       const reviews = await firestoreService.getEventReviews(event.id);
       const review = reviews.find(r => r.id === reviewId);
@@ -871,9 +871,9 @@ export const deleteReview = async (reviewId: string): Promise<void> => {
         break;
       }
     }
-    
+
     await firestoreService.deleteReview(reviewId);
-    
+
     if (eventId) {
       await updateEventRatingStats(eventId);
     }
@@ -906,7 +906,7 @@ export const getAllReviews = async (): Promise<Review[]> => {
   try {
     const events = await firestoreService.listEvents();
     const allReviews: Review[] = [];
-    
+
     for (const event of events) {
       const eventReviews = await firestoreService.getEventReviews(event.id);
       for (const r of eventReviews) {
@@ -928,8 +928,8 @@ export const getAllReviews = async (): Promise<Review[]> => {
         }
       }
     }
-    
-    return allReviews.sort((a, b) => 
+
+    return allReviews.sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   } catch (error) {
@@ -945,7 +945,7 @@ const updateEventRatingStats = async (eventId: string): Promise<void> => {
   try {
     const firestoreReviews = await firestoreService.getEventReviews(eventId);
     const reviews = firestoreReviews.filter(r => !r.isFlagged && !r.isDeleted);
-    
+
     if (reviews.length === 0) {
       await updateEvent(eventId, {
         averageRating: 0,
@@ -953,10 +953,10 @@ const updateEventRatingStats = async (eventId: string): Promise<void> => {
       });
       return;
     }
-    
+
     const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
     const averageRating = Math.round((sum / reviews.length) * 10) / 10;
-    
+
     await updateEvent(eventId, {
       averageRating,
       totalReviews: reviews.length,
