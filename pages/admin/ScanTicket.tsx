@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { getParticipantDetails, findBookingByTicketId } from '../../services/backend';
+import { validateQRCode, parseQRCodeData } from '../../services/qrCodeService';
 import { User, Booking, Event } from '../../types';
 import { useAuth } from '../../App';
 import { useCheckInParticipant, useEventParticipants } from '../../hooks';
@@ -36,7 +38,11 @@ export default function ScanTicket() {
   const [manualId, setManualId] = useState('');
   const [checkedInData, setCheckedInData] = useState<CheckedInData | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const scanLineRef = useRef<HTMLDivElement>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerRef = useRef<HTMLDivElement>(null);
 
   // Get eventId from location state if provided
   const eventId = (location.state as any)?.eventId;
@@ -47,12 +53,12 @@ export default function ScanTicket() {
 
   // Helper function to create detailed error
   const createTicketError = (
-    type: ErrorType, 
+    type: ErrorType,
     details?: { userName?: string; checkedInAt?: string; eventTitle?: string }
   ): TicketError => {
     const now = new Date();
     const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    
+
     switch (type) {
       case 'already_checked_in':
         return {
@@ -126,7 +132,7 @@ export default function ScanTicket() {
   // Animate scan line
   useEffect(() => {
     if (!scanning || checkedInData) return;
-    
+
     const interval = setInterval(() => {
       if (scanLineRef.current) {
         const current = parseFloat(scanLineRef.current.style.top || '10%');
@@ -138,33 +144,128 @@ export default function ScanTicket() {
     return () => clearInterval(interval);
   }, [scanning, checkedInData]);
 
-  // Simulate QR code detection (in a real app, you'd use a camera library)
-  const simulateScan = async () => {
+  // Initialize camera scanner
+  const startCamera = useCallback(async () => {
+    if (scannerRef.current || !scannerContainerRef.current) return;
+
+    try {
+      setCameraError(null);
+      const scanner = new Html5Qrcode('qr-scanner-container', {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false
+      });
+
+      scannerRef.current = scanner;
+
+      await scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0
+        },
+        async (decodedText) => {
+          // QR code detected - process it
+          await handleQRScan(decodedText);
+        },
+        () => {
+          // QR code scan failure - ignore, keep scanning
+        }
+      );
+
+      setCameraActive(true);
+    } catch (err) {
+      console.error('[Scanner] Camera error:', err);
+      setCameraError('Unable to access camera. Please allow camera permissions or use manual entry.');
+      setCameraActive(false);
+    }
+  }, []);
+
+  // Stop camera scanner
+  const stopCamera = useCallback(async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+        scannerRef.current.clear();
+      } catch (err) {
+        console.error('[Scanner] Error stopping camera:', err);
+      }
+      scannerRef.current = null;
+      setCameraActive(false);
+    }
+  }, []);
+
+  // Handle QR code scan result
+  const handleQRScan = async (qrData: string) => {
     if (processing) return;
-    
+
     setProcessing(true);
     setError(null);
     setTicketError(null);
-    
+
     try {
-      // Simulate scanning delay
+      // Stop scanning while processing
+      await stopCamera();
+
+      // Validate QR code with HMAC signature and time window
+      const validation = await validateQRCode(qrData);
+
+      if (!validation.valid) {
+        // Check if it's an expired QR (screenshot attack prevention)
+        if (validation.error?.includes('expired')) {
+          setTicketError(createTicketError('expired'));
+        } else if (validation.error?.includes('signature')) {
+          setTicketError(createTicketError('invalid_format'));
+        } else {
+          setError(validation.error || 'Invalid QR code');
+        }
+        setProcessing(false);
+        return;
+      }
+
+      // Extract booking info from validated QR data
+      const qrPayload = validation.data!;
+
+      // Find booking by ticket ID
+      const booking = await findBookingByTicketId(qrPayload.ticketId);
+
+      if (!booking) {
+        setTicketError(createTicketError('not_found'));
+        setProcessing(false);
+        return;
+      }
+
+      // Process check-in
+      await handleCheckIn(booking.id);
+    } catch (err) {
+      setError((err as Error).message);
+      setProcessing(false);
+    }
+  };
+
+  // Fallback: Simulate scan for demo/testing
+  const simulateScan = async () => {
+    if (processing) return;
+
+    setProcessing(true);
+    setError(null);
+    setTicketError(null);
+
+    try {
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Use React Query cached data for participants
+
       const confirmedBookings = eventParticipants.filter(b => b.status === 'confirmed');
-      
+
       if (confirmedBookings.length === 0) {
-        // If no pending check-ins, simulate an error scenario
         const checkedInBookings = eventParticipants.filter(b => b.status === 'checked_in');
         if (checkedInBookings.length > 0) {
-          // Show already checked in error
           const randomCheckedIn = checkedInBookings[Math.floor(Math.random() * checkedInBookings.length)];
           setTicketError(createTicketError('already_checked_in', {
             userName: randomCheckedIn.userName || 'Participant',
-            checkedInAt: randomCheckedIn.checkedInAt 
-              ? new Date(randomCheckedIn.checkedInAt).toLocaleString('en-US', { 
-                  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
-                })
+            checkedInAt: randomCheckedIn.checkedInAt
+              ? new Date(randomCheckedIn.checkedInAt).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+              })
               : undefined
           }));
           setProcessing(false);
@@ -172,17 +273,26 @@ export default function ScanTicket() {
         }
         throw new Error('No pending check-ins found');
       }
-      
-      // Pick a random booking
+
       const randomBooking = confirmedBookings[Math.floor(Math.random() * confirmedBookings.length)];
-      
-      // Check in the participant
       await handleCheckIn(randomBooking.id);
     } catch (err) {
       setError((err as Error).message);
       setProcessing(false);
     }
   };
+
+  // Start camera on mount, stop on unmount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      startCamera();
+    }, 500); // Small delay to ensure DOM is ready
+
+    return () => {
+      clearTimeout(timer);
+      stopCamera();
+    };
+  }, [startCamera, stopCamera]);
 
   const handleCheckIn = async (bookingId: string) => {
     // SECURITY: Validate booking ID format
@@ -202,39 +312,39 @@ export default function ScanTicket() {
       setProcessing(true);
       setError(null);
       setTicketError(null);
-      
+
       // Get participant details first
       const { booking, user, event } = await getParticipantDetails(sanitizedBookingId);
-      
+
       // Validate all required data exists
       if (!booking || !user || !event) {
         setTicketError(createTicketError('not_found'));
         setProcessing(false);
         return;
       }
-      
+
       // Check if ticket is for the correct event (if eventId is specified)
       if (eventId && booking.eventId !== eventId) {
         setTicketError(createTicketError('wrong_event', { eventTitle: event.title }));
         setProcessing(false);
         return;
       }
-      
+
       // Check booking status with proper null check
       const status = booking.status?.toLowerCase();
       if (status === 'checked_in') {
         setTicketError(createTicketError('already_checked_in', {
           userName: user.name,
-          checkedInAt: booking.checkedInAt 
-            ? new Date(booking.checkedInAt).toLocaleString('en-US', { 
-                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
-              })
+          checkedInAt: booking.checkedInAt
+            ? new Date(booking.checkedInAt).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+            })
             : undefined
         }));
         setProcessing(false);
         return;
       }
-      
+
       if (status === 'cancelled') {
         setTicketError(createTicketError('cancelled'));
         setProcessing(false);
@@ -246,7 +356,7 @@ export default function ScanTicket() {
         setProcessing(false);
         return;
       }
-      
+
       // Check if event has already ended
       const eventDate = new Date(event.eventDate);
       const now = new Date();
@@ -256,27 +366,27 @@ export default function ScanTicket() {
         setProcessing(false);
         return;
       }
-      
+
       // SECURITY: Validate current user exists
       if (!currentUser?.id) {
         setError('Authentication required - please log in again');
         setProcessing(false);
         return;
       }
-      
+
       // Perform check-in with required parameters (bookingId, staffUserId, method)
       await checkInMutation.mutateAsync({
         bookingId: sanitizedBookingId,
         checkedInBy: currentUser.id,
         method: 'qr_scan'
       });
-      
+
       // Update booking status locally for display
       const checkedInBooking: Booking = {
         ...booking,
         status: 'checked_in' as const
       };
-      
+
       // Show success modal
       setCheckedInData({
         booking: checkedInBooking,
@@ -287,7 +397,7 @@ export default function ScanTicket() {
     } catch (err) {
       const error = err as Error;
       console.error('[ScanTicket] Check-in error:', error);
-      
+
       // Parse error message to show appropriate modal
       const errorMsg = error.message?.toLowerCase() || '';
       if (errorMsg.includes('already checked in') || errorMsg.includes('duplicate')) {
@@ -311,15 +421,15 @@ export default function ScanTicket() {
       setError('Please enter a ticket ID');
       return;
     }
-    
+
     setProcessing(true);
     setError(null);
     setTicketError(null);
-    
+
     try {
       // Search for booking by ticket ID
       const result = await findBookingByTicketId(manualId.trim());
-      
+
       if (!result) {
         setShowManualEntry(false);
         setManualId('');
@@ -327,7 +437,7 @@ export default function ScanTicket() {
         setProcessing(false);
         return;
       }
-      
+
       await handleCheckIn(result.id);
       setShowManualEntry(false);
       setManualId('');
@@ -372,7 +482,7 @@ export default function ScanTicket() {
     <div className="font-display bg-[#101622] text-white h-screen w-full relative overflow-hidden flex flex-col">
       {/* Camera Viewfinder Background - Simulated */}
       <div className="absolute inset-0 z-0">
-        <div 
+        <div
           className="w-full h-full bg-cover bg-center"
           style={{
             backgroundImage: `linear-gradient(to bottom, rgba(16, 22, 34, 0.3), rgba(16, 22, 34, 0.5)), url('https://images.unsplash.com/photo-1492538368677-f6e0afe31dcc?w=800&h=1200&fit=crop')`,
@@ -390,14 +500,13 @@ export default function ScanTicket() {
             Scan Ticket
           </h2>
           <div className="flex w-12 items-center justify-end">
-            <button 
+            <button
               onClick={() => setFlashOn(!flashOn)}
-              className={`flex items-center justify-center w-10 h-10 rounded-full backdrop-blur-md border border-white/10 transition-colors ${
-                flashOn ? 'bg-[#135bec] text-white' : 'bg-white/10 text-white hover:bg-[#135bec]'
-              }`}
+              className={`flex items-center justify-center w-10 h-10 rounded-full backdrop-blur-md border border-white/10 transition-colors ${flashOn ? 'bg-[#135bec] text-white' : 'bg-white/10 text-white hover:bg-[#135bec]'
+                }`}
             >
-              <span 
-                className="material-symbols-outlined text-xl" 
+              <span
+                className="material-symbols-outlined text-xl"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 {flashOn ? 'flash_on' : 'flash_off'}
@@ -409,7 +518,7 @@ export default function ScanTicket() {
         {/* Central Scanner Area */}
         <div className="flex-1 flex flex-col items-center justify-center relative w-full">
           {/* Scanner Frame */}
-          <div 
+          <div
             onClick={simulateScan}
             className="relative w-72 h-72 rounded-3xl z-20 flex items-center justify-center cursor-pointer"
             style={{ boxShadow: '0 0 0 4000px rgba(16, 22, 34, 0.85)' }}
@@ -421,7 +530,7 @@ export default function ScanTicket() {
             <div className="absolute bottom-0 right-0 w-8 h-8 border-b-[5px] border-r-[5px] border-[#135bec] rounded-br-2xl -mb-[2px] -mr-[2px] drop-shadow-[0_0_8px_rgba(19,91,236,0.6)]"></div>
 
             {/* Laser Scan Line */}
-            <div 
+            <div
               ref={scanLineRef}
               className="absolute w-[90%] h-[2px] bg-gradient-to-r from-transparent via-[#135bec] to-transparent shadow-[0_0_15px_rgba(19,91,236,1)] opacity-90 transition-all"
               style={{ top: '10%' }}
@@ -462,7 +571,7 @@ export default function ScanTicket() {
         {/* Bottom Actions */}
         <div className="w-full px-6 pb-8 pt-4 z-30 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col gap-5">
           {/* Manual Entry Link */}
-          <button 
+          <button
             onClick={() => setShowManualEntry(true)}
             className="w-full text-center group"
           >
@@ -472,7 +581,7 @@ export default function ScanTicket() {
           </button>
 
           {/* Cancel Button */}
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-5 bg-[#232f48] hover:bg-[#2c3b59] active:bg-[#1d273b] border border-white/5 text-white text-base font-bold leading-normal tracking-[0.015em] transition-all shadow-lg"
           >
@@ -486,13 +595,13 @@ export default function ScanTicket() {
       {/* Manual Entry Modal */}
       {showManualEntry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <div 
+          <div
             className="absolute inset-0 bg-[#111722]/80 backdrop-blur-md"
             onClick={() => setShowManualEntry(false)}
           />
           <div className="relative w-full max-w-sm bg-[#192233]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl">
             <h3 className="text-xl font-bold text-white mb-4 text-center">Enter Ticket ID</h3>
-            
+
             <input
               type="text"
               value={manualId}
@@ -533,9 +642,9 @@ export default function ScanTicket() {
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6">
           {/* Backdrop */}
           <div className="absolute inset-0 bg-[#111722]/60 backdrop-blur-md" />
-          
+
           {/* Modal Card */}
-          <div 
+          <div
             className="relative w-full max-w-[340px] rounded-[32px] p-8 flex flex-col items-center text-center overflow-hidden"
             style={{
               background: 'rgba(25, 34, 51, 0.7)',
@@ -551,7 +660,7 @@ export default function ScanTicket() {
             <div className="relative mb-6">
               <div className="absolute inset-0 rounded-full bg-green-500 blur-xl opacity-20 animate-pulse"></div>
               <div className="relative flex items-center justify-center h-20 w-20 rounded-full bg-green-500/10 ring-1 ring-inset ring-green-400/30">
-                <span 
+                <span
                   className="material-symbols-outlined text-[40px] text-green-400"
                   style={{ fontVariationSettings: "'FILL' 1, 'wght' 400" }}
                 >
@@ -571,11 +680,11 @@ export default function ScanTicket() {
             <div className="mb-4 relative group">
               <div className="absolute inset-0 rounded-full bg-[#135bec] blur-md opacity-40 group-hover:opacity-60 transition-opacity"></div>
               <div className="relative h-28 w-28 p-1 rounded-full border-2 border-[#135bec] bg-[#192233]">
-                <div 
+                <div
                   className="h-full w-full rounded-full overflow-hidden bg-slate-700 bg-center bg-cover"
-                  style={{ 
-                    backgroundImage: checkedInData.user.avatarUrl 
-                      ? `url('${checkedInData.user.avatarUrl}')` 
+                  style={{
+                    backgroundImage: checkedInData.user.avatarUrl
+                      ? `url('${checkedInData.user.avatarUrl}')`
                       : 'linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%)'
                   }}
                 >
@@ -589,7 +698,7 @@ export default function ScanTicket() {
               {/* Verified Badge */}
               <div className="absolute bottom-1 right-1 h-8 w-8 bg-[#101622] rounded-full flex items-center justify-center border-2 border-[#192233]">
                 <div className="h-6 w-6 bg-[#135bec] rounded-full flex items-center justify-center text-white">
-                  <span 
+                  <span
                     className="material-symbols-outlined text-[16px]"
                     style={{ fontVariationSettings: "'FILL' 1" }}
                   >
@@ -613,7 +722,7 @@ export default function ScanTicket() {
             </div>
 
             {/* Action Button */}
-            <button 
+            <button
               onClick={handleDone}
               className="group relative w-full overflow-hidden rounded-xl bg-[#135bec] h-[52px] flex items-center justify-center transition-all hover:bg-blue-600 active:scale-[0.98] shadow-lg shadow-blue-900/20"
             >
@@ -624,7 +733,7 @@ export default function ScanTicket() {
           </div>
 
           {/* Footer Text */}
-          <button 
+          <button
             onClick={handleScanNext}
             className="mt-8 text-sm text-slate-500 font-medium opacity-60 hover:opacity-100 transition-opacity"
           >
@@ -635,13 +744,13 @@ export default function ScanTicket() {
 
       {/* Invalid Ticket Error Modal */}
       {ticketError && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center p-6"
           onClick={handleErrorDismiss}
         >
           {/* Backdrop with blur */}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-md" />
-          
+
           {/* Simulated Scanner Background (visible through blur) */}
           <div className="absolute inset-0 z-0 pointer-events-none">
             <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start text-white/40">
@@ -659,7 +768,7 @@ export default function ScanTicket() {
           </div>
 
           {/* The Modal Card */}
-          <div 
+          <div
             className="relative w-full max-w-sm rounded-2xl p-8 shadow-2xl overflow-hidden animate-fade-in-up"
             style={{
               background: 'rgba(34, 16, 16, 0.85)',
@@ -671,21 +780,21 @@ export default function ScanTicket() {
           >
             {/* Decorative Top Shine */}
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-            
+
             {/* Red Glow Effect */}
             <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-64 bg-red-500/20 blur-[80px] rounded-full pointer-events-none"></div>
 
             {/* Content Wrapper */}
             <div className="flex flex-col items-center text-center relative z-10">
-              
+
               {/* Icon Container with Glow */}
               <div className="relative mb-6">
                 {/* Pulsing Glow Effect */}
                 <div className="absolute inset-0 bg-red-500 rounded-full blur-xl opacity-30 transform scale-150"></div>
                 <div className="absolute inset-0 bg-red-500 rounded-full blur-2xl opacity-20 animate-pulse"></div>
-                
+
                 {/* Main Icon Circle */}
-                <div 
+                <div
                   className="relative w-24 h-24 rounded-full flex items-center justify-center"
                   style={{
                     background: 'linear-gradient(to bottom, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.05))',
@@ -693,28 +802,28 @@ export default function ScanTicket() {
                     boxShadow: '0 0 30px rgba(239, 68, 68, 0.3)'
                   }}
                 >
-                  <span 
+                  <span
                     className="material-symbols-outlined text-red-500 text-5xl drop-shadow-md"
                     style={{ fontVariationSettings: "'FILL' 1, 'wght' 400" }}
                   >
-                    {ticketError.type === 'already_checked_in' ? 'person_off' : 
-                     ticketError.type === 'cancelled' ? 'event_busy' :
-                     ticketError.type === 'waitlist' ? 'hourglass_top' :
-                     ticketError.type === 'wrong_event' ? 'wrong_location' :
-                     ticketError.type === 'expired' ? 'schedule' :
-                     'gpp_bad'}
+                    {ticketError.type === 'already_checked_in' ? 'person_off' :
+                      ticketError.type === 'cancelled' ? 'event_busy' :
+                        ticketError.type === 'waitlist' ? 'hourglass_top' :
+                          ticketError.type === 'wrong_event' ? 'wrong_location' :
+                            ticketError.type === 'expired' ? 'schedule' :
+                              'gpp_bad'}
                   </span>
                 </div>
-                
+
                 {/* Small decorative badge */}
-                <div 
+                <div
                   className="absolute bottom-0 right-0 rounded-full p-1.5 shadow-lg"
                   style={{
                     background: 'rgba(34, 16, 16, 1)',
                     border: '1px solid rgba(255, 255, 255, 0.1)'
                   }}
                 >
-                  <span 
+                  <span
                     className="material-symbols-outlined text-white text-sm"
                     style={{ fontVariationSettings: "'FILL' 1" }}
                   >
@@ -735,7 +844,7 @@ export default function ScanTicket() {
               </p>
 
               {/* Data/Details Card */}
-              <div 
+              <div
                 className="w-full rounded-lg p-4 mb-8 text-left"
                 style={{
                   background: 'rgba(0, 0, 0, 0.3)',
@@ -745,11 +854,11 @@ export default function ScanTicket() {
                 {/* Previous Scan Info */}
                 {ticketError.previousScan && (
                   <div className="flex items-center gap-3 mb-3 border-b border-white/5 pb-3">
-                    <div 
+                    <div
                       className="w-8 h-8 rounded-full flex items-center justify-center"
                       style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                     >
-                      <span 
+                      <span
                         className="material-symbols-outlined text-white/40 text-sm"
                         style={{ fontVariationSettings: "'FILL' 1" }}
                       >
@@ -762,14 +871,14 @@ export default function ScanTicket() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Event Match Info */}
                 <div className="flex items-center gap-3">
-                  <div 
+                  <div
                     className="w-8 h-8 rounded-full flex items-center justify-center"
                     style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                   >
-                    <span 
+                    <span
                       className="material-symbols-outlined text-white/40 text-sm"
                       style={{ fontVariationSettings: "'FILL' 1" }}
                     >
@@ -778,9 +887,8 @@ export default function ScanTicket() {
                   </div>
                   <div>
                     <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Status</p>
-                    <p className={`text-sm font-medium ${
-                      ticketError.eventMatch === 'Valid' ? 'text-green-400' : 'text-red-400'
-                    }`}>
+                    <p className={`text-sm font-medium ${ticketError.eventMatch === 'Valid' ? 'text-green-400' : 'text-red-400'
+                      }`}>
                       {ticketError.eventMatch}
                     </p>
                   </div>
@@ -789,11 +897,11 @@ export default function ScanTicket() {
                 {/* User Name if available */}
                 {ticketError.userName && (
                   <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
-                    <div 
+                    <div
                       className="w-8 h-8 rounded-full flex items-center justify-center"
                       style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                     >
-                      <span 
+                      <span
                         className="material-symbols-outlined text-white/40 text-sm"
                         style={{ fontVariationSettings: "'FILL' 1" }}
                       >
@@ -810,12 +918,12 @@ export default function ScanTicket() {
 
               {/* Actions */}
               <div className="w-full space-y-3">
-                <button 
+                <button
                   onClick={handleErrorTryAgain}
                   className="w-full bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-semibold py-4 px-6 rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group"
                   style={{ boxShadow: '0 10px 30px -10px rgba(239, 68, 68, 0.4)' }}
                 >
-                  <span 
+                  <span
                     className="material-symbols-outlined text-xl group-hover:rotate-180 transition-transform duration-500"
                     style={{ fontVariationSettings: "'FILL' 1" }}
                   >
@@ -823,12 +931,12 @@ export default function ScanTicket() {
                   </span>
                   Try Again
                 </button>
-                
-                <button 
+
+                <button
                   onClick={handleErrorManualEntry}
                   className="w-full bg-transparent hover:bg-white/5 active:bg-white/10 text-white border border-white/20 font-medium py-4 px-6 rounded-xl transition-colors duration-200 flex items-center justify-center gap-2"
                 >
-                  <span 
+                  <span
                     className="material-symbols-outlined text-xl text-white/60"
                     style={{ fontVariationSettings: "'FILL' 1" }}
                   >
