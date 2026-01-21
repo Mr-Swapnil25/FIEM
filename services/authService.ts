@@ -1,7 +1,7 @@
 /**
  * Firebase Authentication Service
  * Handles user authentication with institutional email validation
- * Uses Firebase Data Connect with Cloud SQL PostgreSQL for user profiles
+ * Uses Firebase Firestore for user profiles (migrated from DataConnect)
  * Email format: firstname.lastname.year.division@teamfuture.in
  */
 
@@ -29,7 +29,7 @@ import {
   getUserByEmail as dcGetUserByEmail,
   createUser as dcCreateUser,
   updateUser as dcUpdateUser
-} from './dataConnectService';
+} from './backend';
 import { User, Role } from '../types';
 
 // Re-export types

@@ -1,69 +1,440 @@
 /**
  * Backend Service
- * Re-exports from Data Connect service for backwards compatibility
- * Uses Firebase Data Connect with Cloud SQL PostgreSQL
+ * Uses Firebase Firestore as the primary database
+ * Migrated from DataConnect to pure Firestore
+ * 
+ * @module services/backend
  */
 
-// Re-export all operations from Data Connect service
-export {
-  // User operations
-  getUserById,
-  getUserByEmail,
-  createUser,
-  updateUser,
-  
-  // Event operations
-  getEvents,
-  getPublishedEvents,
-  getEventById,
-  getEventsByOrganizer,
-  createEvent,
-  updateEvent,
-  updateEventStatus,
-  deleteEvent,
-  
-  // Booking operations
-  getUserBookings,
-  getEventParticipants,
-  getBookingById,
-  getBookingByTicketId,
-  checkExistingBooking,
-  createBooking,
-  checkInParticipant,
-  cancelBooking,
-  
-  // Category operations
-  getCategories,
-  createCategory,
-  
-  // Notification operations
-  getUserNotifications,
-  createNotification,
-  markNotificationRead,
-  
-  // Favorite operations
-  getUserFavorites,
-  getUserFavoriteEvents,
-  checkIsFavorite,
-  addFavorite,
-  removeFavorite,
-  
-  // Dashboard operations
-  getDashboardStats,
-  
-  // Utilities
-  generateTicketId,
-  generateQRCode
-} from './dataConnectService';
-
-// Re-export types for convenience
-export type { DataConnectUser } from './dataConnectService';
-
-// Import types and functions
+// Import types
 import { Event, Booking, EventStatus, User, DashboardStats } from '../types';
-import * as dataConnect from './dataConnectService';
+import * as firestoreService from './firestoreService';
 
-// Helper to extract error message
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Generate unique ticket ID
+ */
+export const generateTicketId = (): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const randomPart = Array.from({ length: 6 }, () => 
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join('');
+  return `EVT-${Date.now().toString(36).toUpperCase()}-${randomPart}`;
+};
+
+/**
+ * Generate QR code data
+ */
+export const generateQRCode = (eventId: string, ticketId: string): string => {
+  return JSON.stringify({
+    type: 'EVENTEASE_TICKET',
+    eventId,
+    ticketId,
+    timestamp: Date.now()
+  });
+};
+
+// ============================================================================
+// TYPE MAPPERS
+// ============================================================================
+
+function mapFirestoreUserToUser(fsUser: firestoreService.FirestoreUser): User {
+  return {
+    id: fsUser.id,
+    email: fsUser.email,
+    name: fsUser.displayName || `${fsUser.firstName || ''} ${fsUser.lastName || ''}`.trim() || 'User',
+    role: fsUser.role,
+    firstName: fsUser.firstName,
+    lastName: fsUser.lastName,
+    displayName: fsUser.displayName,
+    avatarUrl: fsUser.avatarUrl,
+    phone: fsUser.phone,
+    department: fsUser.department,
+    year: fsUser.year,
+    division: fsUser.division,
+    rollNo: fsUser.rollNo,
+    collegeIdUrl: fsUser.collegeIdUrl,
+    emailDomain: fsUser.emailDomain,
+    createdAt: firestoreService.timestampToISO(fsUser.createdAt),
+    updatedAt: fsUser.updatedAt ? firestoreService.timestampToISO(fsUser.updatedAt) : undefined,
+    lastLoginAt: fsUser.lastLoginAt ? firestoreService.timestampToISO(fsUser.lastLoginAt) : undefined,
+  };
+}
+
+function mapFirestoreEventToEvent(fsEvent: firestoreService.FirestoreEvent): Event {
+  return {
+    id: fsEvent.id,
+    title: fsEvent.title,
+    description: fsEvent.description,
+    eventDate: firestoreService.timestampToISO(fsEvent.date),
+    venue: fsEvent.venue || fsEvent.location,
+    price: fsEvent.price,
+    totalSlots: fsEvent.capacity,
+    availableSlots: fsEvent.capacity - fsEvent.registeredCount,
+    category: (fsEvent.categoryName || 'Other') as any,
+    imageUrl: fsEvent.imageUrl,
+    adminId: fsEvent.organizerId,
+    status: fsEvent.status,
+    createdAt: firestoreService.timestampToISO(fsEvent.createdAt),
+    averageRating: fsEvent.averageRating,
+    totalReviews: fsEvent.totalReviews,
+  };
+}
+
+function mapFirestoreBookingToBooking(fsBooking: firestoreService.FirestoreBooking): Booking {
+  return {
+    id: fsBooking.id,
+    userId: fsBooking.userId,
+    eventId: fsBooking.eventId,
+    ticketId: fsBooking.ticketId,
+    qrCode: fsBooking.qrCode,
+    status: fsBooking.status,
+    amountPaid: fsBooking.totalAmount,
+    bookedAt: firestoreService.timestampToISO(fsBooking.createdAt),
+    checkedInAt: fsBooking.checkInTime ? firestoreService.timestampToISO(fsBooking.checkInTime) : undefined,
+    createdAt: firestoreService.timestampToISO(fsBooking.createdAt),
+    eventTitle: fsBooking.eventTitle,
+    eventDate: fsBooking.eventDate ? firestoreService.timestampToISO(fsBooking.eventDate) : undefined,
+    eventVenue: fsBooking.eventVenue,
+    userName: fsBooking.userName,
+    userEmail: fsBooking.userEmail,
+  };
+}
+
+// ============================================================================
+// USER OPERATIONS
+// ============================================================================
+
+export const getUserById = async (userId: string): Promise<User | null> => {
+  const user = await firestoreService.getUserById(userId);
+  if (!user) return null;
+  return mapFirestoreUserToUser(user);
+};
+
+export const getUserByEmail = async (email: string): Promise<User | null> => {
+  const user = await firestoreService.getUserByEmail(email);
+  if (!user) return null;
+  return mapFirestoreUserToUser(user);
+};
+
+export const createUser = async (userId: string, userData: Omit<User, 'id'>): Promise<User> => {
+  const email = userData.email.toLowerCase();
+  const emailDomain = email.includes('@') ? '@' + email.split('@')[1] : undefined;
+  const nameParts = (userData.name || '').trim().split(' ');
+  const firstName = nameParts[0] || undefined;
+  const lastName = nameParts.slice(1).join(' ') || undefined;
+  
+  await firestoreService.createUser(userId, {
+    email: email,
+    displayName: userData.name || `${firstName || ''} ${lastName || ''}`.trim() || 'User',
+    role: userData.role || 'student',
+    emailDomain: emailDomain,
+    firstName: firstName,
+    lastName: lastName,
+    year: userData.year,
+    division: userData.division,
+    department: userData.department,
+    phone: userData.phone,
+    avatarUrl: userData.avatarUrl,
+  });
+  
+  return { id: userId, ...userData };
+};
+
+export const updateUser = async (userId: string, data: Partial<User>): Promise<void> => {
+  const nameParts = (data.name || '').trim().split(' ');
+  const firstName = nameParts[0] || undefined;
+  const lastName = nameParts.slice(1).join(' ') || undefined;
+  
+  await firestoreService.updateUser(userId, {
+    displayName: data.name,
+    firstName: firstName,
+    lastName: lastName,
+    phone: data.phone,
+    avatarUrl: data.avatarUrl,
+    department: data.department,
+    year: data.year,
+    division: data.division,
+    rollNo: data.rollNo,
+    collegeIdUrl: data.collegeIdUrl,
+  });
+};
+
+// ============================================================================
+// EVENT OPERATIONS
+// ============================================================================
+
+export const getEvents = async (filters?: { status?: EventStatus }): Promise<Event[]> => {
+  const events = await firestoreService.listEvents({ status: filters?.status });
+  return events.map(mapFirestoreEventToEvent);
+};
+
+export const getPublishedEvents = async (): Promise<Event[]> => {
+  const events = await firestoreService.listPublishedEvents();
+  return events.map(mapFirestoreEventToEvent);
+};
+
+export const getEventById = async (eventId: string): Promise<Event | null> => {
+  const event = await firestoreService.getEventById(eventId);
+  if (!event) return null;
+  return mapFirestoreEventToEvent(event);
+};
+
+export const getEventsByOrganizer = async (organizerId: string): Promise<Event[]> => {
+  const events = await firestoreService.listEvents({ organizerId });
+  return events.map(mapFirestoreEventToEvent);
+};
+
+export const createEvent = async (
+  eventData: Omit<Event, 'id' | 'createdAt' | 'availableSlots'> & { categoryId?: string }
+): Promise<Event> => {
+  const eventId = await firestoreService.createEvent({
+    title: eventData.title,
+    description: eventData.description,
+    date: firestoreService.toTimestamp(eventData.eventDate),
+    time: eventData.eventDate?.split('T')[1]?.substring(0, 5) || '00:00',
+    location: eventData.venue || '',
+    venue: eventData.venue,
+    categoryId: eventData.categoryId || '',
+    categoryName: eventData.category,
+    imageUrl: eventData.imageUrl,
+    capacity: eventData.totalSlots || 0,
+    price: eventData.price || 0,
+    isFree: (eventData.price || 0) === 0,
+    currency: 'INR',
+    organizerId: eventData.adminId || '',
+    organizerName: '',
+    status: eventData.status || 'draft',
+    featured: false,
+    requiresApproval: false,
+    isPublic: true,
+  });
+  
+  return {
+    id: eventId,
+    ...eventData,
+    availableSlots: eventData.totalSlots,
+    createdAt: new Date().toISOString()
+  };
+};
+
+export const updateEvent = async (eventId: string, data: Partial<Event> & { categoryId?: string }): Promise<void> => {
+  await firestoreService.updateEvent(eventId, {
+    title: data.title,
+    description: data.description,
+    date: data.eventDate ? firestoreService.toTimestamp(data.eventDate) : undefined,
+    time: data.eventDate?.split('T')[1]?.substring(0, 5),
+    venue: data.venue,
+    categoryId: data.categoryId,
+    categoryName: data.category,
+    imageUrl: data.imageUrl,
+    capacity: data.totalSlots,
+    price: data.price,
+    isFree: (data.price || 0) === 0,
+    status: data.status,
+    averageRating: data.averageRating,
+    totalReviews: data.totalReviews,
+  });
+};
+
+export const updateEventStatus = async (eventId: string, status: EventStatus): Promise<void> => {
+  await firestoreService.updateEventStatus(eventId, status);
+};
+
+export const deleteEvent = async (eventId: string): Promise<void> => {
+  await firestoreService.deleteEvent(eventId);
+};
+
+// ============================================================================
+// BOOKING OPERATIONS
+// ============================================================================
+
+export const getUserBookings = async (userId: string): Promise<Booking[]> => {
+  const bookings = await firestoreService.getUserBookings(userId);
+  return bookings.map(mapFirestoreBookingToBooking);
+};
+
+export const getEventParticipants = async (eventId: string): Promise<Booking[]> => {
+  const bookings = await firestoreService.getEventParticipants(eventId);
+  return bookings.map(mapFirestoreBookingToBooking);
+};
+
+export const getBookingById = async (bookingId: string): Promise<Booking | null> => {
+  const booking = await firestoreService.getBookingById(bookingId);
+  if (!booking) return null;
+  return mapFirestoreBookingToBooking(booking);
+};
+
+export const getBookingByTicketId = async (ticketId: string): Promise<Booking | null> => {
+  const booking = await firestoreService.getBookingByTicketId(ticketId);
+  if (!booking) return null;
+  return mapFirestoreBookingToBooking(booking);
+};
+
+export const checkExistingBooking = async (userId: string, eventId: string): Promise<boolean> => {
+  const booking = await firestoreService.checkExistingBooking(userId, eventId);
+  return booking !== null;
+};
+
+export const createBooking = async (userId: string, eventId: string, amountPaid: number = 0): Promise<Booking> => {
+  const ticketId = generateTicketId();
+  const qrCode = generateQRCode(eventId, ticketId);
+  
+  const bookingId = await firestoreService.createBooking({
+    userId,
+    eventId,
+    ticketId,
+    qrCode,
+    status: 'confirmed',
+    isWaitlist: false,
+    numberOfTickets: 1,
+    totalAmount: amountPaid,
+    paymentStatus: amountPaid > 0 ? 'completed' : 'not_required',
+  });
+  
+  return {
+    id: bookingId,
+    userId,
+    eventId,
+    ticketId,
+    qrCode,
+    status: 'confirmed',
+    amountPaid,
+    bookedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
+};
+
+export const checkInParticipant = async (bookingId: string, staffUserId: string, method: string = 'qr_scan'): Promise<void> => {
+  await firestoreService.checkInParticipant(
+    bookingId, 
+    staffUserId, 
+    method as 'qr_scan' | 'manual_entry' | 'ticket_id' | 'auto'
+  );
+};
+
+export const cancelBooking = async (bookingId: string, eventId?: string): Promise<void> => {
+  await firestoreService.cancelBooking(bookingId);
+};
+
+// ============================================================================
+// CATEGORY OPERATIONS
+// ============================================================================
+
+export const getCategories = async () => {
+  return firestoreService.listCategories();
+};
+
+export const createCategory = async (name: string, description?: string, icon?: string, color?: string): Promise<void> => {
+  await firestoreService.createCategory({
+    name,
+    description,
+    icon,
+    color,
+    isActive: true,
+    sortOrder: 0,
+  });
+};
+
+// ============================================================================
+// NOTIFICATION OPERATIONS
+// ============================================================================
+
+export const getUserNotifications = async (userId: string) => {
+  return firestoreService.getUserNotifications(userId);
+};
+
+export const createNotification = async (userId: string, title: string, message: string, eventType: string, eventId?: string): Promise<void> => {
+  await firestoreService.createNotification({
+    userId,
+    title,
+    message,
+    type: eventType,
+    eventId,
+  });
+};
+
+export const markNotificationRead = async (notificationId: string): Promise<void> => {
+  await firestoreService.markNotificationRead(notificationId);
+};
+
+// ============================================================================
+// FAVORITE OPERATIONS
+// ============================================================================
+
+export interface FavoriteItem {
+  id: string;
+  eventId: string;
+  createdAt: string;
+}
+
+export const getUserFavorites = async (userId: string): Promise<FavoriteItem[]> => {
+  const favorites = await firestoreService.getUserFavorites(userId);
+  return favorites.map(f => ({
+    id: f.id,
+    eventId: f.eventId,
+    createdAt: firestoreService.timestampToISO(f.createdAt),
+  }));
+};
+
+export const getUserFavoriteEvents = async (userId: string): Promise<Event[]> => {
+  const favorites = await firestoreService.getUserFavorites(userId);
+  if (favorites.length === 0) return [];
+  
+  const eventIds = favorites.map(f => f.eventId);
+  const events = await firestoreService.getEventsByIds(eventIds);
+  return events.map(mapFirestoreEventToEvent);
+};
+
+export const checkIsFavorite = async (userId: string, eventId: string): Promise<{ isFavorite: boolean; favoriteId: string | null }> => {
+  const favorites = await firestoreService.getUserFavorites(userId);
+  const favorite = favorites.find(f => f.eventId === eventId);
+  return {
+    isFavorite: !!favorite,
+    favoriteId: favorite?.id || null
+  };
+};
+
+export const addFavorite = async (userId: string, eventId: string): Promise<FavoriteItem> => {
+  const id = await firestoreService.addFavorite(userId, eventId);
+  return {
+    id,
+    eventId,
+    createdAt: new Date().toISOString()
+  };
+};
+
+export const removeFavorite = async (favoriteId: string): Promise<void> => {
+  const { deleteDoc, doc, getFirestore } = await import('firebase/firestore');
+  const { app } = await import('./firebase');
+  const db = getFirestore(app);
+  await deleteDoc(doc(db, 'favorites', favoriteId));
+};
+
+// ============================================================================
+// DASHBOARD OPERATIONS
+// ============================================================================
+
+export const getDashboardStats = async (organizerId?: string): Promise<DashboardStats> => {
+  const stats = await firestoreService.getDashboardStats(organizerId);
+  return {
+    totalEvents: stats.totalEvents,
+    activeEvents: stats.activeEvents,
+    totalRegistrations: stats.totalBookings,
+    totalRevenue: stats.totalRevenue,
+  };
+};
+
+// Re-export type for backwards compatibility
+export type DataConnectUser = User;
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
 function getErrorMessage(error: unknown, defaultMessage: string): string {
   if (error instanceof Error) {
     return error.message || defaultMessage;
@@ -71,89 +442,55 @@ function getErrorMessage(error: unknown, defaultMessage: string): string {
   return defaultMessage;
 }
 
-// ==================== SUBSCRIPTION FUNCTIONS (Polling-based) ====================
-// Note: Data Connect doesn't support real-time subscriptions like Firestore
-// These implementations use polling for backwards compatibility
+// ============================================================================
+// SUBSCRIPTION FUNCTIONS (Real-time via Firestore)
+// ============================================================================
 
 /**
- * Subscribe to events (polling-based, checks every 30 seconds)
+ * Subscribe to events (real-time via Firestore)
  */
 export const subscribeToEvents = (
   callback: (events: Event[]) => void,
   onError?: (error: Error) => void
 ): (() => void) => {
-  let active = true;
-  
-  const fetchEvents = async () => {
-    if (!active) return;
-    try {
-      const events = await dataConnect.getEvents();
-      if (active) callback(events);
-    } catch (error) {
-      if (active) onError?.(error as Error);
-    }
-  };
-  
-  // Initial fetch
-  fetchEvents();
-  
-  // Poll every 30 seconds
-  const interval = setInterval(fetchEvents, 30000);
-  
-  // Return unsubscribe function
-  return () => {
-    active = false;
-    clearInterval(interval);
-  };
+  return firestoreService.subscribeToEvents(
+    { status: 'published' },
+    (events) => callback(events.map(mapFirestoreEventToEvent)),
+    onError
+  );
 };
 
 /**
- * Subscribe to user bookings (polling-based)
+ * Subscribe to user bookings (real-time via Firestore)
  */
 export const subscribeToUserBookings = (
   userId: string,
   callback: (bookings: Booking[]) => void,
   onError?: (error: Error) => void
 ): (() => void) => {
-  let active = true;
-  
-  const fetchBookings = async () => {
-    if (!active) return;
-    try {
-      const bookings = await dataConnect.getUserBookings(userId);
-      if (active) callback(bookings);
-    } catch (error) {
-      if (active) onError?.(error as Error);
-    }
-  };
-  
-  // Initial fetch
-  fetchBookings();
-  
-  // Poll every 30 seconds
-  const interval = setInterval(fetchBookings, 30000);
-  
-  // Return unsubscribe function
-  return () => {
-    active = false;
-    clearInterval(interval);
-  };
+  return firestoreService.subscribeToUserBookings(
+    userId,
+    (bookings) => callback(bookings.map(mapFirestoreBookingToBooking)),
+    onError
+  );
 };
 
-// ==================== ADMIN FUNCTIONS ====================
+// ============================================================================
+// ADMIN FUNCTIONS
+// ============================================================================
 
 /**
  * Get admin dashboard statistics
  */
 export const getAdminStats = async (adminId: string): Promise<DashboardStats> => {
-  return dataConnect.getDashboardStats(adminId);
+  return getDashboardStats(adminId);
 };
 
 /**
- * Find booking by ticket ID (alias for getBookingByTicketId)
+ * Find booking by ticket ID
  */
 export const findBookingByTicketId = async (ticketId: string): Promise<Booking | null> => {
-  return dataConnect.getBookingByTicketId(ticketId);
+  return getBookingByTicketId(ticketId);
 };
 
 /**
@@ -163,12 +500,11 @@ export const findBookingByQRCode = async (qrData: string): Promise<Booking | nul
   try {
     const parsed = JSON.parse(qrData);
     if (parsed.type === 'EVENTEASE_TICKET' && parsed.ticketId) {
-      return dataConnect.getBookingByTicketId(parsed.ticketId);
+      return getBookingByTicketId(parsed.ticketId);
     }
     return null;
   } catch {
-    // Try as raw ticket ID
-    return dataConnect.getBookingByTicketId(qrData);
+    return getBookingByTicketId(qrData);
   }
 };
 
@@ -180,34 +516,36 @@ export const getParticipantDetails = async (bookingId: string): Promise<{
   user: User | null;
   event: Event | null;
 }> => {
-  const booking = await dataConnect.getBookingById(bookingId);
+  const booking = await getBookingById(bookingId);
   
   if (!booking) {
     return { booking: null, user: null, event: null };
   }
   
   const [user, event] = await Promise.all([
-    dataConnect.getUserById(booking.userId),
-    dataConnect.getEventById(booking.eventId)
+    getUserById(booking.userId),
+    getEventById(booking.eventId)
   ]);
   
   return { booking, user, event };
 };
 
-// ==================== ADDITIONAL HELPER FUNCTIONS ====================
+// ============================================================================
+// ADDITIONAL HELPER FUNCTIONS
+// ============================================================================
 
 /**
- * Get events by status (wrapper for backwards compatibility)
+ * Get events by status
  */
 export const getEventsByStatus = async (status: EventStatus): Promise<Event[]> => {
-  return dataConnect.getEvents({ status });
+  return getEvents({ status });
 };
 
 /**
  * Get upcoming events (published and in the future)
  */
 export const getUpcomingEvents = async (): Promise<Event[]> => {
-  const events = await dataConnect.getPublishedEvents();
+  const events = await getPublishedEvents();
   const now = new Date();
   return events.filter(event => new Date(event.eventDate) >= now);
 };
@@ -216,7 +554,7 @@ export const getUpcomingEvents = async (): Promise<Event[]> => {
  * Get past events
  */
 export const getPastEvents = async (): Promise<Event[]> => {
-  const events = await dataConnect.getPublishedEvents();
+  const events = await getPublishedEvents();
   const now = new Date();
   return events.filter(event => new Date(event.eventDate) < now);
 };
@@ -225,7 +563,7 @@ export const getPastEvents = async (): Promise<Event[]> => {
  * Get user's active bookings (not cancelled)
  */
 export const getUserActiveBookings = async (userId: string): Promise<Booking[]> => {
-  const bookings = await dataConnect.getUserBookings(userId);
+  const bookings = await getUserBookings(userId);
   return bookings.filter(b => b.status !== 'cancelled');
 };
 
@@ -239,11 +577,11 @@ export const getEventStats = async (eventId: string): Promise<{
   revenue: number;
 }> => {
   const [participants, event] = await Promise.all([
-    dataConnect.getEventParticipants(eventId),
-    dataConnect.getEventById(eventId)
+    getEventParticipants(eventId),
+    getEventById(eventId)
   ]);
   
-  const stats = {
+  return {
     totalBookings: participants.filter(p => p.status !== 'cancelled').length,
     checkedIn: participants.filter(p => p.status === 'checked_in').length,
     cancelled: participants.filter(p => p.status === 'cancelled').length,
@@ -251,8 +589,6 @@ export const getEventStats = async (eventId: string): Promise<{
       .filter(p => p.status !== 'cancelled')
       .reduce((sum, p) => sum + (p.amountPaid || 0), 0)
   };
-  
-  return stats;
 };
 
 /**
@@ -263,35 +599,29 @@ export const bookEvent = async (
   eventId: string
 ): Promise<{ success: boolean; booking?: Booking; error?: string }> => {
   try {
-    // Check if event exists
-    const event = await dataConnect.getEventById(eventId);
+    const event = await getEventById(eventId);
     if (!event) {
       return { success: false, error: 'Event not found' };
     }
     
-    // Check if event is published
     if (event.status !== 'published') {
       return { success: false, error: 'Event is not available for booking' };
     }
     
-    // Check availability
     if (event.availableSlots <= 0) {
       return { success: false, error: 'No slots available' };
     }
     
-    // Check existing booking
-    const hasBooking = await dataConnect.checkExistingBooking(userId, eventId);
+    const hasBooking = await checkExistingBooking(userId, eventId);
     if (hasBooking) {
       return { success: false, error: 'You have already booked this event' };
     }
     
-    // Check if event date is in the past
     if (new Date(event.eventDate) < new Date()) {
       return { success: false, error: 'Cannot book past events' };
     }
     
-    // Create booking
-    const booking = await dataConnect.createBooking(userId, eventId, event.price);
+    const booking = await createBooking(userId, eventId, event.price);
     
     return { success: true, booking };
   } catch (error: unknown) {
@@ -308,7 +638,7 @@ export const cancelUserBooking = async (
   userId: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    const booking = await dataConnect.getBookingById(bookingId);
+    const booking = await getBookingById(bookingId);
     
     if (!booking) {
       return { success: false, error: 'Booking not found' };
@@ -326,7 +656,7 @@ export const cancelUserBooking = async (
       return { success: false, error: 'Cannot cancel after check-in' };
     }
     
-    await dataConnect.cancelBooking(bookingId, booking.eventId);
+    await cancelBooking(bookingId, booking.eventId);
     
     return { success: true };
   } catch (error: unknown) {
@@ -343,7 +673,7 @@ export const checkInByTicketId = async (
   staffUserId: string
 ): Promise<{ success: boolean; booking?: Booking; error?: string }> => {
   try {
-    const booking = await dataConnect.getBookingByTicketId(ticketId);
+    const booking = await getBookingByTicketId(ticketId);
     
     if (!booking) {
       return { success: false, error: 'Ticket not found' };
@@ -357,9 +687,9 @@ export const checkInByTicketId = async (
       return { success: false, error: 'Booking was cancelled' };
     }
     
-    await dataConnect.checkInParticipant(booking.id, staffUserId, 'ticket_id');
+    await checkInParticipant(booking.id, staffUserId, 'ticket_id');
     
-    const updatedBooking = await dataConnect.getBookingByTicketId(ticketId);
+    const updatedBooking = await getBookingByTicketId(ticketId);
     
     return { success: true, booking: updatedBooking || booking };
   } catch (error: unknown) {
@@ -374,7 +704,7 @@ export const checkInByTicketId = async (
 export const searchEvents = async (searchTerm: string): Promise<Event[]> => {
   if (!searchTerm.trim()) return [];
   
-  const events = await dataConnect.getPublishedEvents();
+  const events = await getPublishedEvents();
   const term = searchTerm.toLowerCase();
   
   return events.filter(event => 
@@ -384,12 +714,11 @@ export const searchEvents = async (searchTerm: string): Promise<Event[]> => {
   );
 };
 
-// ==================== REVIEW OPERATIONS ====================
+// ============================================================================
+// REVIEW OPERATIONS
+// ============================================================================
 
 import { Review, RatingDistribution } from '../types';
-import * as firestoreService from './firestoreService';
-
-// ZERO localStorage - All reviews persist in Firestore
 
 /**
  * Get reviews for an event with pagination and sorting
@@ -401,10 +730,8 @@ export const getEventReviews = async (
   const { sortBy = 'recent', page = 1, pageSize = 10 } = options;
   
   try {
-    // Get reviews from Firestore
     const firestoreReviews = await firestoreService.getEventReviews(eventId);
     
-    // Map to Review type and filter out flagged reviews
     const allReviews: Review[] = firestoreReviews
       .filter(r => !r.isFlagged && !r.isDeleted)
       .map(r => ({
@@ -422,7 +749,6 @@ export const getEventReviews = async (
         flagReason: r.flagReason,
       }));
     
-    // Sort reviews
     const sorted = [...allReviews].sort((a, b) => {
       switch (sortBy) {
         case 'highest':
@@ -435,7 +761,6 @@ export const getEventReviews = async (
       }
     });
     
-    // Paginate
     const start = (page - 1) * pageSize;
     const paginated = sorted.slice(start, start + pageSize);
     
@@ -493,16 +818,13 @@ export const createReview = async (data: {
   isAnonymous: boolean;
 }): Promise<Review> => {
   try {
-    // Check for existing review
     const existingReview = await getUserReviewForEvent(data.userId, data.eventId);
     if (existingReview) {
       throw new Error('You have already reviewed this event');
     }
     
-    // Get user info for the review
-    const user = await dataConnect.getUserById(data.userId);
+    const user = await getUserById(data.userId);
     
-    // Create review in Firestore
     const reviewId = await firestoreService.createReview({
       userId: data.userId,
       eventId: data.eventId,
@@ -513,7 +835,6 @@ export const createReview = async (data: {
       userAvatarUrl: data.isAnonymous ? undefined : user?.avatarUrl,
     });
     
-    // Update event's aggregate rating
     await updateEventRatingStats(data.eventId);
     
     return {
@@ -539,21 +860,23 @@ export const createReview = async (data: {
  */
 export const deleteReview = async (reviewId: string): Promise<void> => {
   try {
-    // Get review first to update event stats
-    const firestoreReviews = await firestoreService.getEventReviews('');
-    const review = firestoreReviews.find(r => r.id === reviewId);
+    const events = await firestoreService.listEvents();
+    let eventId: string | null = null;
     
-    if (!review) {
-      throw new Error('Review not found');
+    for (const event of events) {
+      const reviews = await firestoreService.getEventReviews(event.id);
+      const review = reviews.find(r => r.id === reviewId);
+      if (review) {
+        eventId = review.eventId;
+        break;
+      }
     }
     
-    const eventId = review.eventId;
-    
-    // Soft delete the review
     await firestoreService.deleteReview(reviewId);
     
-    // Update event's aggregate rating
-    await updateEventRatingStats(eventId);
+    if (eventId) {
+      await updateEventRatingStats(eventId);
+    }
   } catch (error) {
     console.error('[Backend] Failed to delete review:', error);
     throw error;
@@ -581,11 +904,9 @@ export const flagReview = async (
  */
 export const getAllReviews = async (): Promise<Review[]> => {
   try {
-    // Get all events first
     const events = await firestoreService.listEvents();
-    
-    // Get reviews for all events
     const allReviews: Review[] = [];
+    
     for (const event of events) {
       const eventReviews = await firestoreService.getEventReviews(event.id);
       for (const r of eventReviews) {
@@ -608,7 +929,6 @@ export const getAllReviews = async (): Promise<Review[]> => {
       }
     }
     
-    // Sort by most recent first
     return allReviews.sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -627,38 +947,24 @@ const updateEventRatingStats = async (eventId: string): Promise<void> => {
     const reviews = firestoreReviews.filter(r => !r.isFlagged && !r.isDeleted);
     
     if (reviews.length === 0) {
-      // Reset stats if no reviews
-      await dataConnect.updateEvent(eventId, {
+      await updateEvent(eventId, {
         averageRating: 0,
         totalReviews: 0,
-        ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
       });
       return;
     }
     
-    // Calculate average
     const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
-    const averageRating = Math.round((sum / reviews.length) * 10) / 10; // Round to 1 decimal
+    const averageRating = Math.round((sum / reviews.length) * 10) / 10;
     
-    // Calculate distribution
-    const ratingDistribution: RatingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    reviews.forEach(r => {
-      ratingDistribution[r.rating as 1 | 2 | 3 | 4 | 5]++;
-    });
-    
-    // Update event
-    await dataConnect.updateEvent(eventId, {
+    await updateEvent(eventId, {
       averageRating,
       totalReviews: reviews.length,
-      ratingDistribution,
     });
   } catch (error) {
     console.error('[Backend] Failed to update event rating stats:', error);
   }
 };
 
-// Helper delay function (kept for any remaining async simulation)
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-console.log('[Backend] Using Firebase Data Connect with Cloud SQL and Firestore fallback');
-console.log('[Backend] ZERO localStorage - All data persists in Firebase');
+console.log('[Backend] Using Firebase Firestore - DataConnect migration complete');
+console.log('[Backend] ZERO localStorage - All data persists in Firestore');

@@ -72,8 +72,12 @@ service cloud.firestore {
     // ============================================================================
     
     match /users/{userId} {
-      // Users can read their own profile
+      // Users can read their own profile (by document ID)
       allow read: if isOwner(userId);
+      
+      // Users can read their own profile (by email query) - needed for getUserByEmail
+      allow read: if isAuthenticated() 
+                  && resource.data.email == request.auth.token.email;
       
       // Admins can read all user profiles
       allow read: if isAdmin();
@@ -82,7 +86,7 @@ service cloud.firestore {
       allow create: if isOwner(userId) 
                     && hasRequiredFields(['displayName', 'email', 'role'])
                     && request.resource.data.email == request.auth.token.email
-                    && request.resource.data.role in ['student', 'admin'];
+                    && request.resource.data.role in ['student', 'admin', 'super_admin'];
       
       // Users can update their own profile (limited fields, rate limited)
       allow update: if isOwner(userId)
@@ -155,6 +159,28 @@ service cloud.firestore {
       
       // Only admins can manage categories
       allow create, update, delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // FAVORITES COLLECTION
+    // ============================================================================
+    
+    match /favorites/{favoriteId} {
+      // Users can read their own favorites
+      allow read: if isAuthenticated() 
+                  && resource.data.userId == request.auth.uid;
+      
+      // Users can create favorites for themselves
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasRequiredFields(['userId', 'eventId']);
+      
+      // Users can delete their own favorites
+      allow delete: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid;
+      
+      // No updates needed for favorites
+      allow update: if false;
     }
     
     // ============================================================================

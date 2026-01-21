@@ -251,4 +251,4 @@ export const uploadUserAvatar = async (
 };
 
 console.log('[Firebase] Initialized successfully for project:', firebaseConfig.projectId);
-console.log('[Firebase] Using Cloud SQL via Data Connect');
+console.log('[Firebase] Using Firestore as primary database');

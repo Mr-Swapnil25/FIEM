@@ -797,7 +797,7 @@ export interface UploadOptions {
 /**
  * Data source indicator
  */
-export type DataSource = 'data_connect' | 'firestore' | 'cache';
+export type DataSource = 'firestore' | 'cache';
 
 /**
  * Hybrid service result with source tracking

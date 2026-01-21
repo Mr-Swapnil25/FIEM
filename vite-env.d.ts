@@ -20,17 +20,8 @@ interface ImportMetaEnv {
   readonly VITE_APP_CHECK_KEY?: string;
 
   // ============================================
-  // Firebase Data Connect Configuration
-  // ============================================
-  readonly VITE_DATACONNECT_SERVICE_ID: string;
-  readonly VITE_DATACONNECT_LOCATION: string;
-  readonly VITE_DATACONNECT_CONNECTOR_ID: string;
-  readonly VITE_USE_DATA_CONNECT: string;
-
-  // ============================================
   // Firestore Configuration
   // ============================================
-  readonly VITE_USE_FIRESTORE_FALLBACK: string;
   readonly VITE_FIRESTORE_PERSISTENCE: string;
 
   // ============================================
@@ -46,7 +37,6 @@ interface ImportMetaEnv {
   readonly VITE_EMULATOR_FIRESTORE_PORT: string;
   readonly VITE_EMULATOR_STORAGE_PORT: string;
   readonly VITE_EMULATOR_FUNCTIONS_PORT: string;
-  readonly VITE_EMULATOR_DATACONNECT_PORT: string;
 
   // ============================================
   // Feature Flags
