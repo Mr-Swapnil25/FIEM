@@ -16,7 +16,8 @@ service firebase.storage {
     // SEC-006 FIX: Helper function to check admin role
     // Note: This requires custom claims to be set via Firebase Admin SDK
     function isAdmin() {
-      return request.auth != null && request.auth.token.role == 'admin';
+      return request.auth != null && 
+        (request.auth.token.role == 'admin' || request.auth.token.role == 'super_admin');
     }
     
     // Event images - anyone can read, only admins can write valid images

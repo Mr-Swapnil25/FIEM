@@ -10,11 +10,11 @@
 export {
   // Query keys for cache invalidation
   queryKeys,
-  
+
   // User hooks
   useUser,
   useUpdateUser,
-  
+
   // Event hooks
   usePublishedEvents,
   useEvent,
@@ -23,7 +23,7 @@ export {
   useUpdateEvent,
   useDeleteEvent,
   useUpdateEventStatus,
-  
+
   // Booking hooks
   useUserBookings,
   useEventParticipants,
@@ -33,36 +33,36 @@ export {
   useCreateBooking,
   useCancelBooking,
   useCheckInParticipant,
-  
+
   // Category hooks
   useCategories,
-  
+
   // Favorite hooks
   useUserFavorites,
   useIsFavorite,
   useAddFavorite,
   useRemoveFavorite,
   useOptimisticFavorite,
-  
+
   // Notification hooks
   useUserNotifications,
   useMarkNotificationRead,
-  
+
   // Review hooks
   useEventReviews,
   useCreateReview,
   useDeleteReview,
   useFlagReview,
-  
+
   // Dashboard hooks
   useDashboardStats,
-  
+
   // File upload hooks
   useUploadEventImage,
   useUploadUserAvatar,
   useUploadIdCard,
   useDeleteFile,
-  
+
   // Utility hooks
   useErrorMessage,
 } from './useFirebaseData';
@@ -89,3 +89,10 @@ export {
   type UseAuthReturn,
   type SessionInfo,
 } from './useAuth';
+
+// QR Scanner hook
+export { useQRScanner } from './useQRScanner';
+
+// Check-in logic hook
+export { useCheckInLogic, type CheckedInData } from './useCheckInLogic';
+

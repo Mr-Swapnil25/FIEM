@@ -12,7 +12,10 @@
     "deploy:all": "npm run build && firebase deploy --only hosting,functions,firestore:rules,storage",
     "deploy:functions": "cd functions && npm run build && cd .. && firebase deploy --only functions",
     "emulators": "firebase emulators:start",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.16",
@@ -31,15 +34,19 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.14.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^27.4.0",
     "pureimage": "^0.4.18",
     "rollup-plugin-visualizer": "^5.12.0",
     "terser": "^5.36.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vite-bundle-visualizer": "^1.2.1"
+    "vite-bundle-visualizer": "^1.2.1",
+    "vitest": "^4.0.18"
   }
 }

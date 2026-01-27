@@ -219,10 +219,10 @@ export function useProfileUpdate(initialUser: User | null): UseProfileUpdateRetu
       // Update user profile in database
       const updateData: Partial<User> = {
         name: formData.name.trim(),
-        phone: formData.phone.replace(/\D/g, '') || undefined,
-        department: formData.department || undefined,
-        year: formData.year || undefined,
-        rollNo: formData.rollNo || undefined,
+        phone: formData.phone.replace(/\D/g, '') || null,
+        department: formData.department || null,
+        year: formData.year || null,
+        rollNo: formData.rollNo || null,
         avatarUrl
       };
 
@@ -241,9 +241,9 @@ export function useProfileUpdate(initialUser: User | null): UseProfileUpdateRetu
       return updatedUser;
     } catch (error) {
       console.error('[useProfileUpdate] Error saving profile:', error);
-      setErrors(prev => ({ 
-        ...prev, 
-        name: 'Failed to save profile. Please try again.' 
+      setErrors(prev => ({
+        ...prev,
+        name: 'Failed to save profile. Please try again.'
       }));
       return null;
     } finally {

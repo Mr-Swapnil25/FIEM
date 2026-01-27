@@ -192,7 +192,6 @@ export const generateQRCodeImage = async (
 ): Promise<string> => {
   try {
     // Dynamic import of qrcode library if available
-    // @ts-expect-error - qrcode might not be installed
     const QRCode = await import('qrcode').catch(() => null);
 
     if (QRCode) {

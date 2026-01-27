@@ -283,7 +283,10 @@ export const createBooking = async (userId: string, eventId: string, amountPaid:
   const ticketId = generateTicketId();
   const qrCode = generateQRCode(eventId, ticketId);
 
-  const bookingId = await firestoreService.createBooking({
+  // FORCE UNIQUE ID based on User + Event to prevent race conditions
+  const bookingId = `booking_${eventId}_${userId}`;
+
+  const createdId = await firestoreService.createBooking({
     userId,
     eventId,
     ticketId,
@@ -293,7 +296,7 @@ export const createBooking = async (userId: string, eventId: string, amountPaid:
     numberOfTickets: 1,
     totalAmount: amountPaid,
     paymentStatus: amountPaid > 0 ? 'completed' : 'not_required',
-  });
+  }, bookingId);
 
   return {
     id: bookingId,

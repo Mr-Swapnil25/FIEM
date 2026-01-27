@@ -24,12 +24,12 @@ export type EventStatus = 'draft' | 'published' | 'cancelled' | 'completed';
 /**
  * Event categories
  */
-export type EventCategory = 
-  | 'Cultural' 
-  | 'Technical' 
-  | 'Sports' 
-  | 'Workshop' 
-  | 'Seminar' 
+export type EventCategory =
+  | 'Cultural'
+  | 'Technical'
+  | 'Sports'
+  | 'Workshop'
+  | 'Seminar'
   | 'Hackathon'
   | 'Competition'
   | 'Social'
@@ -39,28 +39,28 @@ export type EventCategory =
 /**
  * Booking status
  */
-export type BookingStatus = 
-  | 'confirmed' 
-  | 'cancelled' 
-  | 'checked_in' 
-  | 'waitlist' 
-  | 'expired' 
+export type BookingStatus =
+  | 'confirmed'
+  | 'cancelled'
+  | 'checked_in'
+  | 'waitlist'
+  | 'expired'
   | 'no_show';
 
 /**
  * Payment status for paid events
  */
-export type PaymentStatus = 
-  | 'not_required' 
-  | 'pending' 
-  | 'completed' 
-  | 'failed' 
+export type PaymentStatus =
+  | 'not_required'
+  | 'pending'
+  | 'completed'
+  | 'failed'
   | 'refunded';
 
 /**
  * Notification types
  */
-export type NotificationType = 
+export type NotificationType =
   | 'booking_confirmed'
   | 'booking_cancelled'
   | 'event_reminder'
@@ -123,18 +123,18 @@ export interface User extends BaseDocument {
   name: string;
   role: Role;
   // Profile info
-  firstName?: string;
-  lastName?: string;
-  displayName?: string;
-  avatarUrl?: string;
-  phone?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  phone?: string | null;
   // Institutional info
-  department?: string;
-  year?: string;
-  division?: string;
-  rollNo?: string;
-  collegeIdUrl?: string;
-  emailDomain?: string;
+  department?: string | null;
+  year?: string | null;
+  division?: string | null;
+  rollNo?: string | null;
+  collegeIdUrl?: string | null;
+  emailDomain?: string | null;
   // Metadata
   lastLoginAt?: string;
   isEmailVerified?: boolean;
@@ -652,7 +652,7 @@ export interface ServiceResult<T = void> {
 /**
  * Firebase error codes
  */
-export type FirebaseErrorCode = 
+export type FirebaseErrorCode =
   // Auth errors
   | 'auth/email-already-in-use'
   | 'auth/invalid-email'
@@ -695,7 +695,7 @@ export type FirebaseErrorCode =
 /**
  * Error category for handling
  */
-export type ErrorCategory = 
+export type ErrorCategory =
   | 'network'
   | 'permission'
   | 'validation'

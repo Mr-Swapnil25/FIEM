@@ -12,11 +12,33 @@ import { onAuthStateChanged as subscribeToAuth, signIn, signUp, signOut, AuthRes
 import { PasswordResetPage } from './components/auth/PasswordManagement';
 
 // Icons
-import { 
-  Home, Calendar, User as UserIcon, LogOut, 
-  LayoutDashboard, PlusCircle, FileBarChart, 
+import {
+  Home, Calendar, User as UserIcon, LogOut,
+  LayoutDashboard, PlusCircle, FileBarChart,
   Bell, Menu, X, CheckCircle, Loader2
 } from 'lucide-react';
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+const FULLSCREEN_PATHS = [
+  '/login', '/reset-password', '/verify-email',
+  '/student/profile', '/student/profile/edit', '/student/home',
+  '/student/events', '/student/favorites', '/student/booking-success',
+  '/admin/dashboard', '/admin/events', '/admin/reports', '/admin/reviews',
+  '/admin/profile', '/admin/profile/edit'
+];
+
+const FULLSCREEN_PATH_PREFIXES = [
+  '/student/event/', '/admin/create-event', '/admin/edit-event/',
+  '/admin/event-published', '/admin/scan-ticket', '/admin/participant/'
+];
+
+const isFullScreenPath = (pathname: string): boolean => {
+  if (FULLSCREEN_PATHS.includes(pathname)) return true;
+  return FULLSCREEN_PATH_PREFIXES.some(prefix => pathname.startsWith(prefix));
+};
 
 // ============================================================================
 // LAZY-LOADED COMPONENTS (Code Splitting)
@@ -72,7 +94,7 @@ interface ErrorBoundaryState {
 
 // Using a class component for error boundary (required by React)
 // Note: ErrorBoundary must be a class component as per React documentation
-const LazyErrorBoundary: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = 
+const LazyErrorBoundary: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> =
   ({ children, fallback }) => {
     // For functional approach, we use a wrapper
     // The actual error boundary logic is handled by React.Suspense and try-catch
@@ -105,7 +127,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           <div className="text-center">
             <h2 className="text-xl font-bold text-white mb-2">Failed to load page</h2>
             <p className="text-slate-400 mb-4">Please refresh and try again</p>
-            <button 
+            <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
@@ -146,8 +168,7 @@ const Navbar = () => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Hide navbar on login and profile pages
-  if (!user || location.pathname === '/login' || location.pathname === '/student/profile' || location.pathname === '/student/profile/edit' || location.pathname === '/student/home' || location.pathname === '/student/events' || location.pathname === '/student/favorites' || location.pathname === '/student/booking-success' || location.pathname.startsWith('/student/event/') || location.pathname === '/admin/dashboard' || location.pathname === '/admin/events' || location.pathname === '/admin/reports' || location.pathname === '/admin/reviews' || location.pathname === '/admin/profile' || location.pathname === '/admin/profile/edit' || location.pathname.startsWith('/admin/create-event') || location.pathname.startsWith('/admin/edit-event/') || location.pathname.startsWith('/admin/event-published') || location.pathname.startsWith('/admin/scan-ticket') || location.pathname.startsWith('/admin/participant/')) return null;
+  if (!user || isFullScreenPath(location.pathname)) return null;
 
   const studentLinks = [
     { label: 'Home', path: '/student/home', icon: <Home size={20} /> },
@@ -181,17 +202,16 @@ const Navbar = () => {
               <button
                 key={link.path}
                 onClick={() => navigate(link.path)}
-                className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  location.pathname === link.path 
-                    ? 'bg-white/20 text-white' 
-                    : 'text-blue-100 hover:bg-white/10 hover:text-white'
-                }`}
+                className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${location.pathname === link.path
+                  ? 'bg-white/20 text-white'
+                  : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                  }`}
               >
                 <span className="mr-2">{link.icon}</span>
                 {link.label}
               </button>
             ))}
-            
+
             <div className="ml-4 flex items-center gap-4 pl-4 border-l border-blue-400/30">
               <div className="flex flex-col items-end">
                 <span className="text-sm font-semibold">{user.name}</span>
@@ -226,11 +246,10 @@ const Navbar = () => {
                   navigate(link.path);
                   setIsOpen(false);
                 }}
-                className={`flex items-center w-full px-3 py-3 rounded-md text-base font-medium ${
-                  location.pathname === link.path 
-                    ? 'bg-white/20 text-white' 
-                    : 'text-blue-100 hover:bg-white/10 hover:text-white'
-                }`}
+                className={`flex items-center w-full px-3 py-3 rounded-md text-base font-medium ${location.pathname === link.path
+                  ? 'bg-white/20 text-white'
+                  : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                  }`}
               >
                 <span className="mr-3">{link.icon}</span>
                 {link.label}
@@ -322,35 +341,12 @@ export default function App() {
 // Separate component to access router hooks
 function AppContent({ user, logout }: { user: User | null, logout: () => void }) {
   const location = useLocation();
-  
-  // Check if current page needs full-screen layout (no navbar/footer/padding)
-  const isFullScreenPage = !user || 
-    location.pathname === '/login' || 
-    location.pathname === '/reset-password' ||
-    location.pathname === '/verify-email' ||
-    location.pathname === '/student/profile' ||
-    location.pathname === '/student/profile/edit' ||
-    location.pathname === '/student/home' ||
-    location.pathname === '/student/events' ||
-    location.pathname === '/student/favorites' ||
-    location.pathname === '/student/booking-success' ||
-    location.pathname.startsWith('/student/event/') ||
-    location.pathname === '/admin/dashboard' ||
-    location.pathname === '/admin/events' ||
-    location.pathname === '/admin/reports' ||
-    location.pathname === '/admin/reviews' ||
-    location.pathname === '/admin/profile' ||
-    location.pathname === '/admin/profile/edit' ||
-    location.pathname.startsWith('/admin/create-event') ||
-    location.pathname.startsWith('/admin/edit-event/') ||
-    location.pathname.startsWith('/admin/event-published') ||
-    location.pathname.startsWith('/admin/scan-ticket') ||
-    location.pathname.startsWith('/admin/participant/');
+  const isFullScreenPage = !user || isFullScreenPath(location.pathname);
 
   return (
     <div className={`min-h-screen flex flex-col font-sans ${!isFullScreenPage ? 'bg-slate-100' : ''}`}>
       <Navbar />
-      
+
       <main className={`flex-1 w-full ${!isFullScreenPage ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}`}>
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
@@ -359,7 +355,7 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
               <Route path="/login" element={!user ? <LoginScreen /> : <Navigate to={user.role === 'admin' ? "/admin/dashboard" : "/student/home"} />} />
               <Route path="/reset-password" element={<PasswordResetPage />} />
               <Route path="/verify-email" element={user ? <EmailVerificationPage /> : <Navigate to="/login" />} />
-              
+
               {/* Student Routes */}
               <Route path="/student/*" element={user && user.role === 'student' ? (
                 <Routes>
@@ -398,7 +394,7 @@ function AppContent({ user, logout }: { user: User | null, logout: () => void })
           </Suspense>
         </ErrorBoundary>
       </main>
-      
+
       {/* Simple Footer - hide on full screen pages */}
       {!isFullScreenPage && (
         <footer className="bg-white border-t border-gray-200 py-6 mt-8">

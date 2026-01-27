@@ -16,9 +16,18 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Check if user is admin (based on custom claims)
+    // Check if user is admin (check custom claims first, then Firestore document)
+    // Optimized: Check claims first (no read), then check Firestore only if needed
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.role == 'admin';
+      return isAuthenticated() && (
+        // Check custom claims first (no Firestore read)
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'super_admin' ||
+        // Fallback to Firestore check only if claims not set
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin'))
+      );
     }
     
     // Validate email domain for institutional users
@@ -83,10 +92,16 @@ service cloud.firestore {
       allow read: if isAdmin();
       
       // Users can create their own profile (with rate limiting)
+      // FIX: Enforce role to be 'student' on creation, or allow admin to set other roles
       allow create: if isOwner(userId) 
                     && hasRequiredFields(['displayName', 'email', 'role'])
                     && request.resource.data.email == request.auth.token.email
-                    && request.resource.data.role in ['student', 'admin', 'super_admin'];
+                    && (
+                      // Regular users MUST register as student
+                      (request.resource.data.role == 'student') ||
+                      // Or if the request is actually coming from an admin (unlikely flow but safe)
+                      isAdmin()
+                    );
       
       // Users can update their own profile (limited fields, rate limited)
       allow update: if isOwner(userId)

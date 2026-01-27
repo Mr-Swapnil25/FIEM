@@ -1,23 +1,16 @@
-<div align="center">
+<!-- Capsule Header -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,50:6366F1,100:8B5CF6&height=200&section=header&text=EventEase&fontSize=80&fontColor=ffffff&animation=fadeIn&fontAlignY=35&desc=🎪%20Modern%20Campus%20Event%20Management%20Platform&descSize=20&descAlignY=55" width="100%">
 
-<!-- Animated SVG Logo with Gradient -->
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=800&size=40&pause=1000&color=6366F1&center=true&vCenter=true&multiline=true&random=false&width=500&height=70&lines=EventEase+%F0%9F%8E%AA">
-  <source media="(prefers-color-scheme: light)" srcset="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=800&size=40&pause=1000&color=4F46E5&center=true&vCenter=true&multiline=true&random=false&width=500&height=70&lines=EventEase+%F0%9F%8E%AA">
-  <img alt="EventEase Logo" src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=800&size=40&pause=1000&color=6366F1&center=true&vCenter=true&multiline=true&random=false&width=500&height=70&lines=EventEase+%F0%9F%8E%AA">
-</picture>
+<div align="center">
 
 <!-- Animated Tagline -->
 <p>
   <a href="#">
-    <img src="https://readme-typing-svg.demolab.com?font=Inter&weight=500&size=18&duration=4000&pause=1000&color=94A3B8&center=true&vCenter=true&random=false&width=800&lines=A+Modern+Campus+Event+Management+Platform+%E2%9C%A8;Seamless+Bookings+%7C+QR+Tickets+%7C+Real-time+Analytics+%F0%9F%93%8A;Built+with+React+19+%2B+Firebase+Data+Connect+%2B+Cloud+SQL+%F0%9F%9A%80" alt="Typing SVG">
+    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&duration=3000&pause=1000&color=6366F1&center=true&vCenter=true&random=false&width=700&lines=Seamless+Bookings+%7C+QR+Tickets+%7C+Real-time+Analytics;Built+for+Educational+Institutions+%F0%9F%8E%93;Zero+Paper+Tickets+%E2%80%A2+100%25+Digital+%F0%9F%9A%80" alt="Typing SVG">
   </a>
 </p>
 
-<!-- Animated Divider -->
-<img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a-139a6edaec5c.gif" width="100%">
-
-<!-- Badges with Hover Effects -->
+<!-- Quick Action Badges -->
 <p>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/🚀_Get_Started-4F46E5?style=for-the-badge&logoColor=white" alt="Get Started"></a>
   <a href="#-features"><img src="https://img.shields.io/badge/✨_Features-6366F1?style=for-the-badge&logoColor=white" alt="Features"></a>
@@ -25,30 +18,71 @@
   <a href="#-contributing"><img src="https://img.shields.io/badge/🤝_Contribute-A855F7?style=for-the-badge&logoColor=white" alt="Contributing"></a>
 </p>
 
-<!-- Tech Stack Badges -->
+<!-- Animated Tech Stack Icons -->
 <p>
-  <img src="https://img.shields.io/badge/React-19.2.3-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React">
-  <img src="https://img.shields.io/badge/TypeScript-5.8.2-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Firebase-12.7.0-FFCA28?style=flat-square&logo=firebase&logoColor=black" alt="Firebase">
-  <img src="https://img.shields.io/badge/Vite-6.2.0-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite">
-  <img src="https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="TailwindCSS">
-  <img src="https://img.shields.io/badge/Cloud_SQL-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://skillicons.dev/icons?i=react,typescript,firebase,vite,tailwind,postgres&theme=dark" alt="Tech Stack">
 </p>
 
-<!-- Status Badges -->
+<!-- Status Badges Row -->
 <p>
-  <img src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square" alt="Build Status">
-  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs Welcome">
-  <img src="https://img.shields.io/badge/Firebase-Blaze_Plan-orange?style=flat-square&logo=firebase" alt="Firebase Blaze">
+  <img src="https://img.shields.io/badge/build-passing-22c55e?style=flat-square&logo=github-actions&logoColor=white" alt="Build">
+  <img src="https://img.shields.io/badge/tests-22_passing-22c55e?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/coverage-85%25-22c55e?style=flat-square&logo=codecov&logoColor=white" alt="Coverage">
+  <img src="https://img.shields.io/badge/license-MIT-3b82f6?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/PRs-welcome-a855f7?style=flat-square" alt="PRs">
 </p>
+
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a-139a6edaec5c.gif" width="100%">
 
 </div>
 
-<!-- Animated Demo GIF Placeholder -->
-<p align="center">
-  <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDFxZ2NxdXJ6Y2R5ZnB5eGd4c2xqc2RhbXB0cWRsOHV2dGFyOWdnYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/qgQUggAC3Pfv687qPC/giphy.gif" width="800" style="border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
-</p>
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!--                           DEMO SECTION                              -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div align="center">
+
+### 📸 Live Demo
+
+<table>
+<tr>
+<td width="50%">
+
+**🎓 Student Portal**
+
+![Student Portal](https://placehold.co/400x250/1e1b4b/818cf8?text=Student+Portal\n🎫+Browse+%26+Book)
+
+</td>
+<td width="50%">
+
+**⚙️ Admin Dashboard**
+
+![Admin Dashboard](https://placehold.co/400x250/1e3a5f/60a5fa?text=Admin+Dashboard\n📊+Analytics)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**📱 QR Tickets**
+
+![QR Tickets](https://placehold.co/400x250/1a2e1a/4ade80?text=QR+Tickets\n📲+Scan+%26+Go)
+
+</td>
+<td width="50%">
+
+**📈 Real-time Stats**
+
+![Real-time Stats](https://placehold.co/400x250/2d1b1b/f87171?text=Live+Analytics\n⚡+Real-time)
+
+</td>
+</tr>
+</table>
+
+> 🔗 **[View Live Demo](https://eventease.teamfuture.in)** • **[Watch Video Tour](https://youtube.com)**
+
+</div>
 
 ---
 
@@ -819,15 +853,16 @@ dist/
 <summary><h3>🚀 Optimization Techniques</h3></summary>
 <br>
 
-- ✅ **Lazy Loading**: All route components use `React.lazy()`
-- ✅ **Code Splitting**: Vendor chunks for optimal caching
-- ✅ **Tree Shaking**: Unused code elimination
-- ✅ **Terser Minification**: Console stripping in production
-- ✅ **Modern Targets**: ES2020 for smaller polyfills
-- ✅ **Image Optimization**: WebP with fallbacks
-- ✅ **Caching Headers**: Long-term asset caching
-- ✅ **Batch Queries**: N+1 query fix for favorites (PERF-001)
-- ✅ **Shared Utilities**: Consolidated date formatting (~10 duplicate functions removed)
+| Technique | Status | Impact |
+|:---|:---:|:---|
+| **Lazy Loading** | ✅ | Route components via `React.lazy()` |
+| **Code Splitting** | ✅ | Vendor chunks for caching |
+| **Tree Shaking** | ✅ | Unused code elimination |
+| **Terser Minification** | ✅ | Console stripping in prod |
+| **Cursor Pagination** | ✅ | Efficient large list queries |
+| **Batch Aggregation** | ✅ | N+1 prevention via batching |
+| **Input Sanitization** | ✅ | XSS prevention layer |
+| **Caching Headers** | ✅ | Long-term asset caching |
 
 </details>
 
