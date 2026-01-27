@@ -38,49 +38,23 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<!--                           DEMO SECTION                              -->
+<!--                        ANIMATED HERO                                -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/platane/snk/output/github-contribution-grid-snake-dark.svg" width="100%" alt="Snake animation">
+</p>
 
 <div align="center">
 
-### 📸 Live Demo
+<!-- Animated Developer GIF -->
+<img src="https://media.giphy.com/media/qgQUggAC3Pfv687qPC/giphy.gif" width="400" alt="Developer Coding">
+<img src="https://media.giphy.com/media/f3iwJFOVOwuy7K6FFw/giphy.gif" width="400" alt="Coding Animation">
 
-<table>
-<tr>
-<td width="50%">
+<br><br>
 
-**🎓 Student Portal**
-
-![Student Portal](https://placehold.co/400x250/1e1b4b/818cf8?text=Student+Portal\n🎫+Browse+%26+Book)
-
-</td>
-<td width="50%">
-
-**⚙️ Admin Dashboard**
-
-![Admin Dashboard](https://placehold.co/400x250/1e3a5f/60a5fa?text=Admin+Dashboard\n📊+Analytics)
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**📱 QR Tickets**
-
-![QR Tickets](https://placehold.co/400x250/1a2e1a/4ade80?text=QR+Tickets\n📲+Scan+%26+Go)
-
-</td>
-<td width="50%">
-
-**📈 Real-time Stats**
-
-![Real-time Stats](https://placehold.co/400x250/2d1b1b/f87171?text=Live+Analytics\n⚡+Real-time)
-
-</td>
-</tr>
-</table>
-
-> 🔗 **[View Live Demo](https://eventease.teamfuture.in)** • **[Watch Video Tour](https://youtube.com)**
+<!-- Fun Stats -->
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=14&duration=3000&pause=500&color=6366F1&center=true&vCenter=true&multiline=true&width=600&height=80&lines=%E2%9A%A1+4000%2B+lines+of+TypeScript;%F0%9F%8E%AB+100%25+Digital+QR+Tickets;%F0%9F%9B%A1%EF%B8%8F+Production-Ready+Security" alt="Stats">
 
 </div>
 
